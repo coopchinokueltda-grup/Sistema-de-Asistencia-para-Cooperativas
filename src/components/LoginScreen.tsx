@@ -3,24 +3,26 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { 
-  Building2, 
   Lock, 
   User, 
   ArrowRight, 
   ShieldCheck, 
   AlertCircle,
-  Smartphone
+  Smartphone,
+  Eye,
+  EyeOff
 } from 'lucide-react';
+import CoopLogo from './CoopLogo';
 
 export default function LoginScreen() {
   const { login, createInitialAdmin, settings } = useAuth();
   
-  // Por defecto, mostrar siempre el formulario de inicio de sesión
   const [mode, setMode] = useState<'login' | 'initial_admin'>('login');
   
   // Campos de inicio de sesión
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   
   // Campos de configuración inicial
   const [adminName, setAdminName] = useState('');
@@ -37,14 +39,12 @@ export default function LoginScreen() {
       try {
         const res = await fetch('/api/system-status');
         const data = await res.json();
-        // Solo si el servidor confirma explícitamente que no hay ningún admin, sugerir la pantalla de creación
         if (data && data.hasAdmin === false) {
           setMode('initial_admin');
         } else {
           setMode('login');
         }
       } catch {
-        // En caso de duda, dejar siempre en modo inicio de sesión
         setMode('login');
       }
     }
@@ -87,208 +87,191 @@ export default function LoginScreen() {
   };
 
   return (
-    <div className="min-h-screen bg-stone-900 text-stone-100 flex flex-col justify-center items-center p-4 sm:p-6 selection:bg-emerald-600 selection:text-white">
+    <div className="min-h-screen bg-[#071512] text-[#F5F7F5] flex flex-col justify-center items-center p-4 sm:p-6 selection:bg-[#00A878] selection:text-white">
       
       <div className="w-full max-w-md">
         
-        {/* Cabecera institucional */}
+        {/* Cabecera institucional con Logo Oficial */}
         <div className="mb-6 text-center">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-950 border border-emerald-700/50 text-emerald-400 mb-3 shadow-sm">
-            <Building2 className="w-7 h-7" />
+          <div className="inline-flex items-center justify-center p-1 rounded-2xl bg-[#101E1A] border border-[#203B30] mb-3 shadow-xl">
+            <CoopLogo size={52} className="w-14 h-14" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-white">
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white uppercase">
             {settings.company_name}
           </h1>
-          <p className="text-xs text-stone-400 mt-1">
-            Registro y control de asistencia laboral
+          <p className="text-xs text-[#00A878] font-medium tracking-wide mt-1">
+            Sistema de Control de Asistencia y Personal
           </p>
         </div>
 
-        {/* Tarjeta de Acceso */}
-        <div className="bg-stone-950/80 border border-stone-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-sm">
+        {/* Tarjeta de Formulario Principal */}
+        <div className="bg-[#101E1A] border border-[#203B30] rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
           
+          {/* Alerta de Error */}
           {errorMsg && (
-            <div className="mb-5 p-3.5 bg-rose-950/50 border border-rose-800/60 rounded-xl text-rose-200 text-xs flex items-start gap-2.5">
-              <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0 mt-0.5" />
-              <span>{errorMsg}</span>
+            <div className="mb-5 p-3.5 bg-rose-950/40 border border-[#EF5350]/40 rounded-2xl text-xs text-rose-200 flex items-start space-x-2.5 animate-fadeIn">
+              <AlertCircle className="w-4 h-4 text-[#EF5350] shrink-0 mt-0.5" />
+              <div className="leading-relaxed">{errorMsg}</div>
             </div>
           )}
 
-          {mode === 'login' ? (
-            /* Formulario Principal de Inicio de Sesión */
-            <div>
-              <div className="mb-5 pb-3 border-b border-stone-800">
-                <h2 className="text-sm font-bold text-white">
-                  Iniciar sesión
-                </h2>
-                <p className="text-xs text-stone-400 mt-0.5">
-                  Ingrese con su correo electrónico institucional o número de cédula.
-                </p>
-              </div>
-
-              <form onSubmit={handleLoginSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-300 mb-1">
-                    Correo electrónico o Cédula (CI)
-                  </label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-stone-500 absolute left-3.5 top-3" />
-                    <input
-                      type="text"
-                      required
-                      placeholder="ej: coopchinokueltda@gmail.com o 5203568"
-                      value={identifier}
-                      onChange={(e) => setIdentifier(e.target.value)}
-                      className="w-full pl-10 pr-3.5 py-2.5 text-xs bg-stone-900 border border-stone-700 rounded-xl text-white placeholder-stone-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-stone-300 mb-1">
-                    Contraseña
-                  </label>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-stone-500 absolute left-3.5 top-3" />
-                    <input
-                      type="password"
-                      required
-                      placeholder="Ingrese su contraseña"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full pl-10 pr-3.5 py-2.5 text-xs bg-stone-900 border border-stone-700 rounded-xl text-white placeholder-stone-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-2.5 px-4 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2 mt-2"
-                >
-                  <span>{loading ? 'Verificando...' : 'Iniciar sesión'}</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
-              </form>
-
-              {/* Enlace para ir a configuración inicial si correspondiera */}
-              <div className="mt-4 text-center">
-                <button
-                  type="button"
-                  onClick={() => { setErrorMsg(null); setMode('initial_admin'); }}
-                  className="text-[11px] text-stone-500 hover:text-stone-300 transition-colors"
-                >
-                  ¿Primer uso del sistema? Configurar administrador
-                </button>
-              </div>
-            </div>
-          ) : (
-            /* Pantalla de Creación de Administrador Inicial */
-            <div>
-              <div className="mb-5 pb-3 border-b border-stone-800">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-amber-950/80 border border-amber-700/40 text-amber-300 text-[10px] font-semibold mb-2">
-                  <ShieldCheck className="w-3 h-3" />
-                  <span>Configuración inicial</span>
-                </div>
-                <h2 className="text-sm font-bold text-white">
-                  Registrar administrador principal
-                </h2>
-                <p className="text-xs text-stone-400 mt-1 leading-relaxed">
-                  Ingrese los datos de la persona a cargo de la administración de personal.
-                </p>
-              </div>
-
-              <form onSubmit={handleInitialAdminSubmit} className="space-y-3">
-                <div>
-                  <label className="block text-xs font-semibold text-stone-300 mb-1">
-                    Nombre completo
-                  </label>
+          {/* MODO 1: INICIO DE SESIÓN */}
+          {mode === 'login' && (
+            <form onSubmit={handleLoginSubmit} className="space-y-4">
+              
+              <div>
+                <label className="block text-xs font-bold text-[#A5B4AC] mb-1.5">
+                  Cédula de Identidad o Correo
+                </label>
+                <div className="relative">
+                  <User className="w-4 h-4 text-[#A5B4AC] absolute left-3.5 top-3.5" />
                   <input
                     type="text"
+                    value={identifier}
+                    onChange={(e) => setIdentifier(e.target.value)}
+                    placeholder="Ej: 5203568 o usuario@gmail.com"
                     required
-                    placeholder="Ej: Pedro Martínez"
-                    value={adminName}
-                    onChange={(e) => setAdminName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-stone-900 border border-stone-700 rounded-xl text-white placeholder-stone-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                    autoComplete="username"
+                    className="w-full pl-10 pr-4 py-2.5 text-xs bg-[#162720] border border-[#203B30] rounded-2xl text-white placeholder-stone-500 focus:outline-none focus:border-[#00A878] font-medium transition-colors"
                   />
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-stone-300 mb-1">
-                    Cédula de identidad (CI)
-                  </label>
+              <div>
+                <label className="block text-xs font-bold text-[#A5B4AC] mb-1.5">
+                  Contraseña de Acceso
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-[#A5B4AC] absolute left-3.5 top-3.5" />
                   <input
-                    type="text"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••••••"
                     required
-                    placeholder="Ej: 5203568"
-                    value={adminDoc}
-                    onChange={(e) => setAdminDoc(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-stone-900 border border-stone-700 rounded-xl text-white placeholder-stone-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 font-mono"
+                    autoComplete="current-password"
+                    className="w-full pl-10 pr-10 py-2.5 text-xs bg-[#162720] border border-[#203B30] rounded-2xl text-white placeholder-stone-500 focus:outline-none focus:border-[#00A878] font-medium transition-colors font-mono"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-stone-300 mb-1">
-                    Correo institucional
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="admin@cooperativa.com"
-                    value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-stone-900 border border-stone-700 rounded-xl text-white placeholder-stone-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-stone-300 mb-1">
-                    Contraseña
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Mínimo 6 caracteres"
-                    value={adminPassword}
-                    onChange={(e) => setAdminPassword(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-stone-900 border border-stone-700 rounded-xl text-white placeholder-stone-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-                  />
-                </div>
-
-                <div className="pt-2 space-y-2">
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full py-2.5 px-4 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white text-xs font-bold rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    <span>{loading ? 'Creando cuenta...' : 'Crear cuenta de administrador'}</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-
-                  {/* Botón para volver a iniciar sesión si la cuenta ya existe */}
                   <button
                     type="button"
-                    onClick={() => { setErrorMsg(null); setMode('login'); }}
-                    className="w-full py-2 px-3 bg-stone-900 hover:bg-stone-800 text-stone-300 text-xs font-semibold rounded-xl border border-stone-700 transition-colors"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-3 text-[#A5B4AC] hover:text-white"
                   >
-                    Ya tengo una cuenta / Iniciar sesión
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-              </form>
-            </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full mt-2 py-3 bg-[#00A878] hover:bg-[#008F68] active:scale-[0.99] disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl shadow-[#00A878]/30 transition-all flex items-center justify-center space-x-2"
+              >
+                {loading ? (
+                  <span>Verificando credenciales...</span>
+                ) : (
+                  <>
+                    <span>Ingresar al Sistema</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+              <div className="pt-2 text-center">
+                <span className="text-[11px] text-[#A5B4AC]">
+                  Personal operativo y administrativo autorizado
+                </span>
+              </div>
+
+            </form>
           )}
 
-          {/* Pie informativo */}
-          <div className="mt-6 pt-4 border-t border-stone-800 text-center">
-            <span className="text-[11px] text-stone-500 flex items-center justify-center gap-1.5">
-              <Smartphone className="w-3.5 h-3.5 text-stone-400" />
-              <span>Aplicación instalable en teléfonos móviles y computadoras</span>
-            </span>
-          </div>
+          {/* MODO 2: CONFIGURACIÓN INICIAL DEL ADMINISTRADOR */}
+          {mode === 'initial_admin' && (
+            <form onSubmit={handleInitialAdminSubmit} className="space-y-4">
+              
+              <div className="p-3 bg-[#063D32] border border-[#00A878]/40 rounded-2xl text-xs text-[#00A878] font-bold flex items-center gap-2 mb-2">
+                <ShieldCheck className="w-4 h-4 shrink-0" />
+                <span>Configuración de Administrador Principal</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#A5B4AC] mb-1">
+                  Nombre Completo
+                </label>
+                <input
+                  type="text"
+                  value={adminName}
+                  onChange={(e) => setAdminName(e.target.value)}
+                  placeholder="Ej: Pedro Martínez"
+                  required
+                  className="w-full px-3.5 py-2 text-xs bg-[#162720] border border-[#203B30] rounded-xl text-white focus:outline-none focus:border-[#00A878]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#A5B4AC] mb-1">
+                  Cédula de Identidad (CI)
+                </label>
+                <input
+                  type="text"
+                  value={adminDoc}
+                  onChange={(e) => setAdminDoc(e.target.value)}
+                  placeholder="Ej: 5203568"
+                  required
+                  className="w-full px-3.5 py-2 text-xs bg-[#162720] border border-[#203B30] rounded-xl text-white font-mono focus:outline-none focus:border-[#00A878]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#A5B4AC] mb-1">
+                  Correo Institucional
+                </label>
+                <input
+                  type="email"
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  placeholder="coopchinokueltda@gmail.com"
+                  required
+                  className="w-full px-3.5 py-2 text-xs bg-[#162720] border border-[#203B30] rounded-xl text-white focus:outline-none focus:border-[#00A878]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#A5B4AC] mb-1">
+                  Contraseña Segura
+                </label>
+                <input
+                  type="password"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  placeholder="••••••••••••"
+                  required
+                  className="w-full px-3.5 py-2 text-xs bg-[#162720] border border-[#203B30] rounded-xl text-white font-mono focus:outline-none focus:border-[#00A878]"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-[#00A878] hover:bg-[#008F68] disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider rounded-2xl shadow-xl transition-all"
+              >
+                {loading ? 'Creando cuenta...' : 'Crear Administrador Principal'}
+              </button>
+
+            </form>
+          )}
 
         </div>
 
+        {/* Pie de página con indicador PWA */}
+        <div className="mt-6 text-center text-xs text-[#A5B4AC] flex items-center justify-center space-x-2 font-mono">
+          <Smartphone className="w-3.5 h-3.5 text-[#00A878]" />
+          <span>Aplicación instalable PWA (móviles y escritorio)</span>
+        </div>
+
       </div>
+
     </div>
   );
 }

@@ -8,11 +8,10 @@ import {
   MapPin, 
   CheckCircle2, 
   AlertTriangle, 
-  RefreshCw,
-  Flashlight,
-  SwitchCamera,
-  ShieldCheck,
-  Building2
+  RefreshCw, 
+  Flashlight, 
+  SwitchCamera, 
+  ShieldCheck 
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -43,9 +42,7 @@ function playConfirmationChime() {
 
     osc.start();
     osc.stop(ctx.currentTime + 0.26);
-  } catch {
-    // Si el navegador bloquea audio sin interacción previa, se ignora silenciosamente
-  }
+  } catch {}
 }
 
 export default function QRScannerModal({ recordType, onClose, onSuccess }: Props) {
@@ -82,14 +79,17 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
     }
   }, []);
 
-  // Detener la cámara limpiamente
   const stopCamera = useCallback(() => {
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current.getTracks().forEach(track => {
+        try {
+          track.stop();
+        } catch {}
+      });
       streamRef.current = null;
     }
     if (videoRef.current) {
@@ -97,74 +97,74 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
     }
   }, []);
 
-  // Procesar código decodificado
-  const handleScannedValue = useCallback(async (decodedText: string) => {
-    if (isProcessing) return;
+  // Procesa el token QR detectado
+  const handleScannedValue = useCallback(async (rawValue: string) => {
+    if (isProcessing || successData) return;
     setIsProcessing(true);
+    stopCamera();
 
     try {
-      stopCamera();
-
       let targetEmployeeId = user?.id;
 
-      // Código de la sede o kiosco
-      if (decodedText.includes(settings.workplace_qr_secret) || decodedText.includes('CHINOKUE-SEDE')) {
+      if (rawValue.startsWith('CHINOKUE_KIOSK:')) {
         targetEmployeeId = user?.id;
-      } 
-      // Carnet de empleado
-      else if (decodedText.startsWith('EMP-QR-') || decodedText.includes('CHINOKUE-EMP-')) {
-        const found = employees.find(e => e.qr_token === decodedText || decodedText.includes(e.document_id));
-        if (found) targetEmployeeId = found.id;
+      } else if (rawValue.startsWith('CHINOKUE-EMP-')) {
+        const docId = rawValue.replace('CHINOKUE-EMP-', '').trim();
+        const matched = employees.find(e => e.document_id === docId);
+        if (matched) {
+          targetEmployeeId = matched.id;
+        } else if (user?.role === 'employee') {
+          targetEmployeeId = user.id;
+        } else {
+          throw new Error(`No se encontró ningún empleado con la cédula ${docId}.`);
+        }
+      } else {
+        const matchedByToken = employees.find(e => e.qr_token === rawValue);
+        if (matchedByToken) {
+          targetEmployeeId = matchedByToken.id;
+        } else if (user) {
+          targetEmployeeId = user.id;
+        } else {
+          throw new Error('Código QR no reconocido por el sistema.');
+        }
       }
 
       if (!targetEmployeeId) {
-        throw new Error('El código QR no corresponde a un punto de marcación autorizado.');
+        throw new Error('No fue posible identificar al trabajador para la marcación.');
       }
 
-      const res = await recordAttendanceMark(recordType, targetEmployeeId, 'qr_scan');
-      if (!res.success) {
+      const res = await recordAttendanceMark(
+        recordType,
+        targetEmployeeId,
+        rawValue.startsWith('CHINOKUE_KIOSK:') ? 'kiosk_scan' : 'qr_scan'
+      );
+
+      if (!res.success || !res.record) {
         throw new Error(res.error || 'No fue posible registrar la marcación.');
       }
 
       playConfirmationChime();
-
       if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-        navigator.vibrate([70, 40, 70]);
+        try { navigator.vibrate([80, 40, 80]); } catch {}
       }
 
       setSuccessData(res.record);
       if (onSuccess) onSuccess();
     } catch (err: any) {
-      setErrorMsg(err.message || 'Error al procesar el código.');
+      setErrorMsg(err.message || 'Error al procesar el código QR.');
       setIsProcessing(false);
     }
-  }, [isProcessing, user, settings, employees, recordType, recordAttendanceMark, onSuccess, stopCamera]);
+  }, [isProcessing, successData, user, employees, recordAttendanceMark, recordType, stopCamera, onSuccess]);
 
-  // Bucle de escaneo fotograma a fotograma
-  const scanFrame = useCallback(() => {
+  // Bucle de escaneo continuo
+  const scanFrame = () => {
+    if (!videoRef.current || videoRef.current.readyState < 2) {
+      animationFrameRef.current = requestAnimationFrame(scanFrame);
+      return;
+    }
+
     const video = videoRef.current;
-    const canvas = canvasRef.current;
 
-    if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA || isProcessing) {
-      animationFrameRef.current = requestAnimationFrame(scanFrame);
-      return;
-    }
-
-    const width = video.videoWidth;
-    const height = video.videoHeight;
-
-    canvas.width = width;
-    canvas.height = height;
-
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) {
-      animationFrameRef.current = requestAnimationFrame(scanFrame);
-      return;
-    }
-
-    ctx.drawImage(video, 0, 0, width, height);
-
-    // 1. Detección nativa por hardware si está disponible
     if ('BarcodeDetector' in window) {
       try {
         const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
@@ -177,21 +177,30 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
             }
           })
           .catch(() => {
-            runJsQR(ctx, width, height);
+            scanWithJsQR(video);
           });
         return;
       } catch {
-        // Fallback a jsQR
+        scanWithJsQR(video);
+        return;
       }
     }
 
-    // 2. Detección por software con jsQR
-    runJsQR(ctx, width, height);
-  }, [isProcessing, handleScannedValue]);
+    scanWithJsQR(video);
+  };
 
-  const runJsQR = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+  const scanWithJsQR = (video: HTMLVideoElement) => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+
     try {
-      const imageData = ctx.getImageData(0, 0, width, height);
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(imageData.data, imageData.width, imageData.height, {
         inversionAttempts: 'dontInvert',
       });
@@ -294,23 +303,23 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-stone-950/90 backdrop-blur-md">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
       
       <canvas ref={canvasRef} className="hidden" />
 
-      <div className="bg-gradient-to-b from-stone-900 to-stone-950 text-stone-100 rounded-3xl max-w-sm w-full overflow-hidden border border-emerald-800/40 shadow-2xl flex flex-col relative">
+      <div className="bg-[#101E1A] text-[#F5F7F5] rounded-3xl max-w-sm w-full overflow-hidden border border-[#203B30] shadow-2xl flex flex-col relative">
         
         {/* Barra superior */}
-        <div className="px-4 py-3.5 flex items-center justify-between border-b border-stone-800/80 bg-stone-900/60">
+        <div className="px-4 py-3.5 flex items-center justify-between border-b border-[#203B30] bg-[#071512]">
           <div className="flex items-center space-x-2">
-            <div className={`p-1.5 rounded-xl ${recordType === 'entrada' ? 'bg-emerald-950 text-emerald-400 border border-emerald-700/50' : 'bg-amber-950 text-amber-400 border border-amber-700/50'}`}>
+            <div className={`p-1.5 rounded-xl ${recordType === 'entrada' ? 'bg-[#063D32] text-[#00A878] border border-[#00A878]/30' : 'bg-amber-950 text-[#F5B942] border border-[#F5B942]/30'}`}>
               <Camera className="w-4 h-4" />
             </div>
             <div>
               <h3 className="font-bold text-xs tracking-tight text-white capitalize">
                 Marcar {recordType}
               </h3>
-              <p className="text-[10px] text-stone-400">
+              <p className="text-[10px] text-[#A5B4AC]">
                 Lector de asistencia
               </p>
             </div>
@@ -320,7 +329,7 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
             {hasTorch && (
               <button
                 onClick={toggleTorch}
-                className={`p-1.5 rounded-xl transition-colors ${torchOn ? 'bg-amber-500/20 text-amber-300' : 'text-stone-400 hover:text-white'}`}
+                className={`p-1.5 rounded-xl transition-colors ${torchOn ? 'bg-[#F5B942]/20 text-[#F5B942]' : 'text-[#A5B4AC] hover:text-white'}`}
                 title="Linterna"
               >
                 <Flashlight className="w-4 h-4" />
@@ -328,14 +337,14 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
             )}
             <button
               onClick={switchCameraFacing}
-              className="p-1.5 text-stone-400 hover:text-white rounded-xl transition-colors"
+              className="p-1.5 text-[#A5B4AC] hover:text-white rounded-xl transition-colors"
               title="Cambiar cámara"
             >
               <SwitchCamera className="w-4 h-4" />
             </button>
             <button
               onClick={onClose}
-              className="p-1.5 text-stone-400 hover:text-white rounded-xl hover:bg-stone-800 transition-colors"
+              className="p-1.5 text-[#A5B4AC] hover:text-white rounded-xl hover:bg-[#162720] transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -345,44 +354,44 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
         {/* Visor */}
         <div className="p-4 flex flex-col items-center">
           {successData ? (
-            <div className="py-6 px-3 flex flex-col items-center text-center w-full animate-in fade-in zoom-in-95 duration-200">
-              <div className="w-16 h-16 rounded-2xl bg-emerald-950 border border-emerald-600/50 flex items-center justify-center text-emerald-400 mb-3 shadow-lg shadow-emerald-950/40">
+            <div className="py-6 px-3 flex flex-col items-center text-center w-full animate-fadeIn">
+              <div className="w-16 h-16 rounded-2xl bg-[#063D32] border border-[#00A878]/50 flex items-center justify-center text-[#00A878] mb-3 shadow-lg shadow-[#00A878]/25">
                 <CheckCircle2 className="w-9 h-9" />
               </div>
               
               <h4 className="text-base font-bold text-white tracking-tight">
                 Marcación de {recordType} registrada
               </h4>
-              <p className="text-xs text-emerald-400 font-semibold mt-0.5 mb-4">
+              <p className="text-xs text-[#00A878] font-semibold mt-0.5 mb-4">
                 {successData.employee?.full_name || user?.full_name}
               </p>
 
-              <div className="w-full bg-stone-950/90 border border-stone-800 rounded-2xl p-3.5 text-left text-xs space-y-2 mb-5 font-mono">
+              <div className="w-full bg-[#071512] border border-[#203B30] rounded-2xl p-3.5 text-left text-xs space-y-2 mb-5 font-mono">
                 <div className="flex justify-between items-center">
-                  <span className="text-stone-500 text-[11px]">Hora local:</span>
-                  <span className="font-bold text-stone-100">{successData.timestamp_local}</span>
+                  <span className="text-[#A5B4AC] text-[11px]">Hora local:</span>
+                  <span className="font-bold text-white">{successData.timestamp_local}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-stone-500 text-[11px]">Calificación:</span>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                  <span className="text-[#A5B4AC] text-[11px]">Calificación:</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                     successData.status === 'puntual'
-                      ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/60'
-                      : 'bg-amber-950 text-amber-300 border border-amber-700/60'
+                      ? 'bg-[#063D32] text-[#00A878] border border-[#00A878]/40'
+                      : 'bg-amber-950 text-[#F5B942] border border-[#F5B942]/40'
                   }`}>
                     {successData.status.replace('_', ' ')}
                   </span>
                 </div>
                 {successData.accuracy && (
                   <div className="flex justify-between items-center">
-                    <span className="text-stone-500 text-[11px]">Precisión GPS:</span>
-                    <span className="text-emerald-400">±{Math.round(successData.accuracy)}m</span>
+                    <span className="text-[#A5B4AC] text-[11px]">Precisión GPS:</span>
+                    <span className="text-[#00A878]">±{Math.round(successData.accuracy)}m</span>
                   </div>
                 )}
               </div>
 
               <button
                 onClick={onClose}
-                className="w-full py-3 bg-emerald-700 hover:bg-emerald-600 active:bg-emerald-800 text-white font-bold text-xs rounded-xl shadow-lg transition-all"
+                className="w-full py-3 bg-[#00A878] hover:bg-[#008F68] active:bg-[#063D32] text-white font-bold text-xs rounded-xl shadow-lg transition-all"
               >
                 Aceptar
               </button>
@@ -390,18 +399,18 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
           ) : (
             <div className="w-full flex flex-col items-center">
               {errorMsg ? (
-                <div className="p-5 bg-rose-950/40 border border-rose-800/60 rounded-2xl text-center space-y-2.5 my-3 w-full">
-                  <AlertTriangle className="w-8 h-8 text-rose-400 mx-auto" />
+                <div className="p-5 bg-rose-950/40 border border-[#EF5350]/60 rounded-2xl text-center space-y-2.5 my-3 w-full">
+                  <AlertTriangle className="w-8 h-8 text-[#EF5350] mx-auto" />
                   <p className="text-xs text-rose-200 leading-relaxed">{errorMsg}</p>
                   <button
                     onClick={() => { setErrorMsg(null); setFacingMode('environment'); }}
-                    className="px-3.5 py-1.5 bg-stone-800 hover:bg-stone-700 text-xs font-semibold text-white rounded-lg inline-flex items-center gap-1.5 mx-auto transition-colors"
+                    className="px-3.5 py-1.5 bg-[#162720] hover:bg-[#203B30] text-xs font-semibold text-white rounded-lg inline-flex items-center gap-1.5 mx-auto transition-colors"
                   >
                     <RefreshCw className="w-3 h-3" /> Reintentar
                   </button>
                 </div>
               ) : (
-                <div className="relative w-full aspect-square max-w-[280px] rounded-3xl overflow-hidden bg-black border-2 border-stone-800 shadow-inner flex items-center justify-center">
+                <div className="relative w-full aspect-square max-w-[280px] rounded-3xl overflow-hidden bg-black border-2 border-[#203B30] shadow-inner flex items-center justify-center">
                   
                   <video
                     ref={videoRef}
@@ -411,28 +420,28 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
                     autoPlay
                   />
 
-                  {/* Retícula de Enfoque */}
+                  {/* Retícula de Enfoque con resplandor esmeralda */}
                   <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
                     <div className="w-48 h-48 relative">
-                      <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-emerald-400 rounded-tl-xl" />
-                      <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-emerald-400 rounded-tr-xl" />
-                      <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-emerald-400 rounded-bl-xl" />
-                      <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-emerald-400 rounded-br-xl" />
-                      <div className="absolute inset-x-2 top-0 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-sm shadow-emerald-400 animate-pulse" />
+                      <div className="absolute top-0 left-0 w-6 h-6 border-t-2 border-l-2 border-[#00A878] rounded-tl-xl" />
+                      <div className="absolute top-0 right-0 w-6 h-6 border-t-2 border-r-2 border-[#00A878] rounded-tr-xl" />
+                      <div className="absolute bottom-0 left-0 w-6 h-6 border-b-2 border-l-2 border-[#00A878] rounded-bl-xl" />
+                      <div className="absolute bottom-0 right-0 w-6 h-6 border-b-2 border-r-2 border-[#00A878] rounded-br-xl" />
+                      <div className="absolute inset-x-2 top-0 h-0.5 bg-gradient-to-r from-transparent via-[#00A878] to-transparent shadow-sm shadow-[#00A878] animate-pulse" />
                     </div>
                   </div>
 
                   {/* Estado de procesamiento */}
                   {isProcessing && (
-                    <div className="absolute inset-0 bg-stone-950/80 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20">
-                      <RefreshCw className="w-7 h-7 text-emerald-400 animate-spin mb-2" />
+                    <div className="absolute inset-0 bg-[#071512]/80 backdrop-blur-sm flex flex-col items-center justify-center text-white z-20">
+                      <RefreshCw className="w-7 h-7 text-[#00A878] animate-spin mb-2" />
                       <span className="text-xs font-semibold tracking-wide">Validando marcación...</span>
                     </div>
                   )}
 
                   {!cameraReady && !errorMsg && (
-                    <div className="absolute inset-0 bg-stone-950 flex flex-col items-center justify-center text-stone-400 z-10">
-                      <RefreshCw className="w-6 h-6 text-emerald-400 animate-spin mb-2" />
+                    <div className="absolute inset-0 bg-[#071512] flex flex-col items-center justify-center text-[#A5B4AC] z-10">
+                      <RefreshCw className="w-6 h-6 text-[#00A878] animate-spin mb-2" />
                       <span className="text-xs">Iniciando cámara...</span>
                     </div>
                   )}
@@ -440,16 +449,16 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
               )}
 
               {/* Barra de Telemetría GPS */}
-              <div className="mt-3.5 w-full bg-stone-950/90 px-3.5 py-2 rounded-2xl border border-stone-800 flex items-center justify-between text-[11px] text-stone-400 font-mono">
+              <div className="mt-3.5 w-full bg-[#071512] px-3.5 py-2 rounded-2xl border border-[#203B30] flex items-center justify-between text-[11px] text-[#A5B4AC] font-mono">
                 <div className="flex items-center space-x-2">
-                  <MapPin className={`w-3.5 h-3.5 ${gpsStatus ? 'text-emerald-400' : 'text-stone-600 animate-pulse'}`} />
+                  <MapPin className={`w-3.5 h-3.5 ${gpsStatus ? 'text-[#00A878]' : 'text-stone-600 animate-pulse'}`} />
                   <span>
                     {gpsStatus 
                       ? `GPS: ±${Math.round(gpsStatus.accuracy || 10)}m` 
                       : 'Buscando satélites...'}
                   </span>
                 </div>
-                <span className="text-[10px] text-stone-500 uppercase">
+                <span className="text-[10px] text-[#A5B4AC] uppercase">
                   {settings.timezone.split('/')[1] || 'Asunción'}
                 </span>
               </div>

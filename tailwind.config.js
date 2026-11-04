@@ -8,6 +8,21 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        coop: {
+          emerald: '#00A878',
+          primary: '#008F68',
+          dark: '#063D32',
+          bg: '#071512',
+          card: '#101E1A',
+          surface: '#162720',
+          border: '#203B30',
+          text: '#F5F7F5',
+          muted: '#A5B4AC',
+          amber: '#F5B942',
+          rose: '#EF5350',
+          blue: '#0284c7',
+          violet: '#4f46e5',
+        },
         brand: {
           50: '#ecfdf5',
           100: '#d1fae5',

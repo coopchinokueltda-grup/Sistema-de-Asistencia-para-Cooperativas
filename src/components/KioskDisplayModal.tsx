@@ -4,13 +4,11 @@ import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { SystemSettings } from '@/types';
 import { 
-  Building2, 
   X, 
   Clock, 
   Maximize2,
   Radio,
-  ShieldCheck,
-  Sparkles
+  ShieldCheck
 } from 'lucide-react';
 import CoopLogo from './CoopLogo';
 
@@ -70,82 +68,87 @@ export default function KioskDisplayModal({ settings, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/95 backdrop-blur-xl">
-      <div className="bg-gradient-to-b from-[#06140e] via-[#091f16] to-[#040e09] border-2 border-amber-600/40 rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 text-white flex flex-col items-center text-center relative overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/90 backdrop-blur-xl animate-fadeIn">
+      <div className="bg-[#101E1A] border border-[#203B30] rounded-3xl shadow-2xl max-w-md w-full p-6 sm:p-8 text-white flex flex-col items-center text-center relative overflow-hidden">
         
-        {/* Luces de fondo */}
-        <div className="absolute top-0 right-0 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        {/* Resplandor ambiental de fondo */}
+        <div className="absolute top-0 right-0 w-72 h-72 bg-[#00A878]/15 rounded-full blur-3xl pointer-events-none"></div>
 
         {/* Controles de cabecera */}
         <div className="w-full flex items-center justify-between mb-4 relative z-10">
           <button
             onClick={toggleFullScreen}
-            className="p-2 text-stone-400 hover:text-white rounded-xl bg-stone-900/80 border border-stone-800 transition-colors"
+            className="p-2 text-[#A5B4AC] hover:text-white rounded-xl bg-[#162720] border border-[#203B30] transition-colors"
             title="Pantalla completa"
           >
             <Maximize2 className="w-4 h-4" />
           </button>
           
-          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-600/40 text-[10px] text-emerald-300 font-mono font-bold tracking-widest uppercase">
-            <Radio className="w-3 h-3 text-emerald-400 animate-pulse" />
-            <span>Kiosco Central Oficial</span>
+          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#063D32] border border-[#00A878]/40 text-[10px] text-[#00A878] font-mono font-bold tracking-widest uppercase">
+            <Radio className="w-3 h-3 text-[#00A878] animate-pulse" />
+            <span>Kiosco Central de Recepción</span>
           </div>
 
           <button
             onClick={onClose}
-            className="p-2 text-stone-400 hover:text-white rounded-xl bg-stone-900/80 border border-stone-800 transition-colors"
+            className="p-2 text-[#A5B4AC] hover:text-white rounded-xl bg-[#162720] border border-[#203B30] transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Identidad de la Entidad */}
-        <div className="flex items-center space-x-3 mb-2 relative z-10">
-          <CoopLogo size={48} className="w-12 h-12 drop-shadow-md" />
-          <div className="text-left">
-            <h2 className="text-base sm:text-lg font-black text-white tracking-tight uppercase leading-tight">
-              {settings.company_name}
-            </h2>
-            <p className="text-xs text-amber-300 font-medium">
-              Sede Central &bull; Punto de Marcación
-            </p>
-          </div>
+        {/* Logo Institucional */}
+        <div className="mb-2 relative z-10">
+          <CoopLogo size={48} className="w-12 h-12" />
         </div>
 
-        {/* Reloj Digital de Alta Precisión */}
-        <div className="my-4 bg-[#05110a]/90 border border-emerald-900/60 rounded-3xl px-6 py-4 w-full relative z-10 shadow-inner">
-          <div className="flex items-baseline justify-center font-mono">
-            <span className="text-5xl sm:text-6xl font-black tracking-wider text-white drop-shadow">
-              {currentTime || '--:--'}
-            </span>
-            <span className="text-2xl sm:text-3xl font-bold text-emerald-400 ml-1">
-              :{currentSeconds || '00'}
-            </span>
-          </div>
-          <p className="text-xs text-stone-300 capitalize mt-1.5 font-medium">
+        <h2 className="text-base font-black tracking-tight uppercase text-white mb-0.5 relative z-10">
+          {settings.company_name}
+        </h2>
+        <p className="text-[11px] text-[#00A878] font-medium tracking-wide mb-4 relative z-10">
+          Punto Oficial de Registro Horario
+        </p>
+
+        {/* Gran Reloj Digital en tiempo real */}
+        <div className="bg-[#071512] rounded-2xl px-6 py-3 border border-[#203B30] mb-5 w-full relative z-10">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-[#A5B4AC] mb-1 capitalize">
             {currentDate}
-          </p>
-          <div className="text-[10px] text-stone-400 mt-1 font-mono">
-            Sello horario: {settings.timezone.replace('_', ' ')}
+          </div>
+          <div className="flex items-baseline justify-center space-x-2 font-mono">
+            <span className="text-4xl sm:text-5xl font-black text-white tracking-tight drop-shadow-md">
+              {currentTime}
+            </span>
+            <span className="text-xl font-bold text-[#00A878] animate-pulse">
+              :{currentSeconds}
+            </span>
+          </div>
+          <div className="text-[10px] font-mono text-[#A5B4AC] mt-1">
+            Hora legal: {settings.timezone}
           </div>
         </div>
 
-        {/* Código QR Central con Marco Dorado */}
-        <div className="p-5 bg-white rounded-3xl shadow-2xl border-4 border-amber-500/50 my-2 relative group z-10">
+        {/* Tarjeta con Código QR Dinámico del Kiosco con Radar Sweep */}
+        <div className="relative p-5 bg-white rounded-3xl shadow-2xl mb-4 border-4 border-[#00A878]">
           <QRCodeSVG
-            value={settings.workplace_qr_secret}
-            size={230}
+            value={`CHINOKUE_KIOSK:${settings.workplace_qr_secret}:${Date.now()}`}
+            size={220}
             level="H"
             includeMargin={true}
           />
+          {/* Línea animada de radar */}
+          <div className="absolute inset-x-5 top-5 h-1 bg-[#00A878] rounded-full shadow-[0_0_12px_#00A878] animate-pulse" />
         </div>
 
-        {/* Instrucciones */}
-        <div className="mt-4 text-center relative z-10">
-          <p className="text-xs text-stone-300 leading-relaxed max-w-xs font-medium">
-            Abra la aplicación en su teléfono móvil y seleccione <b>Marcar entrada</b> o <b>Marcar salida</b> para enfocar este código.
+        <div className="text-xs font-semibold text-white space-y-1 relative z-10">
+          <p>Acerque su teléfono celular con la aplicación abierta.</p>
+          <p className="text-[11px] text-[#A5B4AC]">
+            Presione <span className="text-[#00A878] font-bold">Marcar Entrada</span> o <span className="text-[#F5B942] font-bold">Marcar Salida</span> y apunte hacia esta pantalla.
           </p>
+        </div>
+
+        <div className="mt-4 pt-3 border-t border-[#203B30] w-full flex items-center justify-center space-x-1.5 text-[10px] text-[#A5B4AC] font-mono relative z-10">
+          <ShieldCheck className="w-3.5 h-3.5 text-[#00A878]" />
+          <span>Sello criptográfico inmutable contra adulteración horaria</span>
         </div>
 
       </div>

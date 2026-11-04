@@ -7,7 +7,7 @@ interface Props {
   size?: number;
 }
 
-export default function CoopLogo({ className = 'w-9 h-9', size = 36 }: Props) {
+export default function CoopLogo({ className = 'w-10 h-10', size = 40 }: Props) {
   return (
     <svg 
       className={className} 
@@ -17,36 +17,38 @@ export default function CoopLogo({ className = 'w-9 h-9', size = 36 }: Props) {
       fill="none" 
       xmlns="http://www.w3.org/2000/svg"
     >
-      {/* Círculo exterior con borde dorado sutil */}
-      <circle cx="50" cy="50" r="46" fill="#061a12" stroke="#d97706" strokeWidth="2.5" />
-      <circle cx="50" cy="50" r="41" fill="none" stroke="#059669" strokeWidth="1" strokeDasharray="3 3" />
+      {/* Círculo exterior con resplandor dorado institucional */}
+      <circle cx="50" cy="50" r="47" fill="#063D32" stroke="#F5B942" strokeWidth="3" />
+      <circle cx="50" cy="50" r="43" fill="#071E18" stroke="#00A878" strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />
       
-      {/* Símbolo de los dos pinos del cooperativismo entrelazados con espiga */}
+      {/* Símbolo de los dos pinos gemelos del cooperativismo universal */}
+      {/* Pino izquierdo (Verde esmeralda vibrante) */}
       <path 
-        d="M37 68 L37 54 L27 54 L37 38 L31 38 L42 22 L53 38 L47 38 L57 54 L47 54 L47 68 Z" 
-        fill="#10b981" 
+        d="M38 72 L38 58 L28 58 L38 42 L32 42 L43 24 L54 42 L48 42 L58 58 L48 58 L48 72 Z" 
+        fill="#00A878" 
       />
+      {/* Pino derecho (Verde principal con profundidad) */}
       <path 
-        d="M57 68 L57 54 L47 54 L57 38 L51 38 L62 22 L73 38 L67 38 L77 54 L67 54 L67 68 Z" 
-        fill="#047857" 
+        d="M58 72 L58 58 L48 58 L58 42 L52 42 L63 24 L74 42 L68 42 L78 58 L68 58 L68 72 Z" 
+        fill="#008F68" 
       />
       
-      {/* Espiga de trigo dorada de producción agrícola */}
+      {/* Espiga de trigo central en oro */}
       <path 
-        d="M50 72 Q50 48 50 28" 
-        stroke="#f59e0b" 
+        d="M50 74 L50 28" 
+        stroke="#F5B942" 
         strokeWidth="2.5" 
         strokeLinecap="round" 
       />
-      <ellipse cx="44" cy="38" rx="3" ry="5" transform="rotate(-30 44 38)" fill="#f59e0b" />
-      <ellipse cx="56" cy="38" rx="3" ry="5" transform="rotate(30 56 38)" fill="#f59e0b" />
-      <ellipse cx="43" cy="48" rx="3" ry="5" transform="rotate(-30 43 48)" fill="#fbbf24" />
-      <ellipse cx="57" cy="48" rx="3" ry="5" transform="rotate(30 57 48)" fill="#fbbf24" />
-      <ellipse cx="45" cy="58" rx="2.5" ry="4.5" transform="rotate(-30 45 58)" fill="#f59e0b" />
-      <ellipse cx="55" cy="58" rx="2.5" ry="4.5" transform="rotate(30 55 58)" fill="#f59e0b" />
+      <ellipse cx="44" cy="38" rx="2.8" ry="4.5" transform="rotate(-30 44 38)" fill="#F5B942" />
+      <ellipse cx="56" cy="38" rx="2.8" ry="4.5" transform="rotate(30 56 38)" fill="#F5B942" />
+      <ellipse cx="43" cy="48" rx="2.8" ry="4.5" transform="rotate(-30 43 48)" fill="#FCD34D" />
+      <ellipse cx="57" cy="48" rx="2.8" ry="4.5" transform="rotate(30 57 48)" fill="#FCD34D" />
+      <ellipse cx="45" cy="58" rx="2.5" ry="4" transform="rotate(-30 45 58)" fill="#F5B942" />
+      <ellipse cx="55" cy="58" rx="2.5" ry="4" transform="rotate(30 55 58)" fill="#F5B942" />
 
-      {/* Base institucional */}
-      <rect x="33" y="68" width="34" height="4" rx="2" fill="#d97706" />
+      {/* Base sólida de la cooperativa en oro */}
+      <rect x="30" y="72" width="40" height="4.5" rx="2.25" fill="#F5B942" />
     </svg>
   );
 }

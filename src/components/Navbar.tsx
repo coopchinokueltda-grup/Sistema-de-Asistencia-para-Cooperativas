@@ -7,8 +7,7 @@ import {
   Clock, 
   Smartphone,
   ShieldCheck,
-  Radio,
-  Wifi
+  Radio
 } from 'lucide-react';
 import CoopLogo from './CoopLogo';
 
@@ -68,98 +67,91 @@ export default function Navbar() {
   };
 
   return (
-    <header className="bg-[#07130e] text-stone-100 border-b border-emerald-900/40 sticky top-0 z-40 shadow-xl backdrop-blur-md">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
+    <header className="bg-[#071512] text-[#F5F7F5] border-b border-[#203B30] sticky top-0 z-40 shadow-xl backdrop-blur-md">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 py-3 flex items-center justify-between">
         
         {/* Entidad e Insignia */}
         <div className="flex items-center space-x-3.5">
-          <div className="relative group cursor-pointer">
-            <div className="absolute -inset-1 bg-gradient-to-r from-emerald-600 to-amber-600 rounded-2xl blur-sm opacity-40 group-hover:opacity-75 transition duration-300"></div>
-            <div className="relative rounded-xl overflow-hidden shadow-lg shadow-black/60 bg-[#06140e] p-0.5 border border-amber-600/30">
-              <CoopLogo size={40} className="w-10 h-10" />
-            </div>
+          <div className="relative group cursor-pointer shrink-0">
+            <CoopLogo size={42} className="w-11 h-11" />
           </div>
 
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="font-extrabold text-sm sm:text-base tracking-tight text-white uppercase drop-shadow-sm">
+              <h1 className="font-extrabold text-sm sm:text-base tracking-tight text-white uppercase drop-shadow-sm leading-tight">
                 {settings.company_name}
               </h1>
-              <span className="hidden sm:inline-block text-[9px] font-black tracking-widest uppercase bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/30">
+              <span className="hidden sm:inline-block text-[9px] font-black tracking-widest uppercase bg-[#063D32] text-[#00A878] px-2 py-0.5 rounded-full border border-[#00A878]/30">
                 Oficial
               </span>
             </div>
-            <p className="text-[11px] text-emerald-400/80 font-medium tracking-wide flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <p className="text-[11px] text-[#A5B4AC] font-medium tracking-wide flex items-center gap-1.5 mt-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#00A878] animate-pulse"></span>
               Sistema de Control de Asistencia y Personal
             </p>
           </div>
         </div>
 
         {/* Reloj y Telemetría del Servidor */}
-        <div className="hidden lg:flex items-center space-x-3 bg-[#0a1b14]/80 px-4 py-2 rounded-2xl border border-emerald-800/30 shadow-inner">
-          <div className="flex items-center space-x-2 text-emerald-400">
-            <Radio className="w-3.5 h-3.5 animate-pulse text-emerald-400" />
-            <span className="text-[10px] font-mono uppercase tracking-wider text-stone-400 font-semibold">
-              Hora legal
-            </span>
+        <div className="hidden lg:flex items-center space-x-3 bg-[#101E1A] px-4 py-2 rounded-2xl border border-[#203B30] shadow-inner">
+          <div className="text-right">
+            <div className="text-[10px] font-bold text-[#A5B4AC] uppercase tracking-wider flex items-center justify-end gap-1">
+              <ShieldCheck className="w-3 h-3 text-[#00A878]" />
+              <span>Hora Legal Paraguay</span>
+            </div>
+            <div className="font-mono text-base font-black tracking-tight text-white flex items-baseline justify-end gap-0.5">
+              <span>{currentTime}</span>
+              <span className="text-xs text-[#00A878] font-bold animate-pulse">:{currentSeconds}</span>
+            </div>
           </div>
-
-          <div className="flex items-baseline space-x-1 font-mono">
-            <span className="text-base font-bold text-stone-100 tracking-wider">
-              {currentTime || '--:--'}
-            </span>
-            <span className="text-xs font-semibold text-emerald-400">
-              :{currentSeconds || '00'}
-            </span>
-          </div>
-
-          <div className="pl-2 border-l border-emerald-900/60 text-[10px] font-mono text-stone-400">
-            {settings.timezone.replace('_', ' ')}
+          <div className="h-6 w-px bg-[#203B30]"></div>
+          <div className="text-[10px] text-[#A5B4AC] font-mono leading-tight">
+            <span className="text-white font-semibold block">{settings.timezone}</span>
+            <span className="text-[#00A878]">Sello UTC Activo</span>
           </div>
         </div>
 
-        {/* Acciones y Sesión */}
-        <div className="flex items-center space-x-2.5">
+        {/* Acciones y Perfil */}
+        <div className="flex items-center space-x-2.5 sm:space-x-3">
+          
+          {/* Botón PWA si está disponible */}
           {isInstallable && (
             <button
               onClick={handleInstallClick}
-              className="flex items-center space-x-1.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 active:scale-95 text-white px-3 py-1.5 rounded-xl text-xs font-bold shadow-md shadow-emerald-950/40 transition-all border border-emerald-400/30"
-              title="Instalar en pantalla de inicio"
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-[#00A878] hover:bg-[#008F68] active:scale-95 text-white text-xs font-bold rounded-xl shadow-lg shadow-[#00A878]/25 transition-all"
+              title="Instalar aplicación en dispositivo"
             >
               <Smartphone className="w-3.5 h-3.5" />
-              <span>Instalar app</span>
+              <span className="hidden sm:inline">Instalar App</span>
             </button>
           )}
 
+          {/* Ficha de Usuario Activo */}
           {user && (
-            <div className="flex items-center space-x-2.5 bg-[#0b1d16]/90 pl-3 pr-1.5 py-1.5 rounded-2xl border border-emerald-800/40 shadow-sm">
+            <div className="flex items-center space-x-2 sm:space-x-3 bg-[#101E1A] border border-[#203B30] pl-2 sm:pl-3 pr-1.5 py-1.5 rounded-2xl">
               <div className="text-right hidden sm:block">
-                <div className="text-xs font-bold text-white truncate max-w-[150px]">
+                <div className="text-xs font-bold text-white leading-tight">
                   {user.full_name}
                 </div>
-                <div className="text-[10px] font-medium flex items-center justify-end gap-1">
-                  {user.role === 'admin' ? (
-                    <span className="text-amber-400 font-semibold tracking-wide">Administración</span>
-                  ) : (
-                    <span className="text-emerald-300">{user.position}</span>
-                  )}
+                <div className="text-[10px] text-[#00A878] font-medium leading-tight">
+                  {user.role === 'admin' ? 'Administrador' : user.position}
                 </div>
               </div>
 
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-700 to-teal-900 text-stone-100 flex items-center justify-center font-black text-xs border border-emerald-500/40 shadow-inner">
-                {user.full_name.charAt(0)}
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#00A878] to-[#063D32] border border-[#00A878]/40 flex items-center justify-center text-white font-black text-xs shrink-0 shadow">
+                {user.full_name?.charAt(0) || 'U'}
               </div>
 
               <button
                 onClick={logout}
-                className="p-1.5 text-stone-400 hover:text-rose-400 hover:bg-stone-900/60 rounded-xl transition-colors"
-                title="Cerrar sesión"
+                className="p-1.5 text-[#A5B4AC] hover:text-[#EF5350] hover:bg-[#162720] rounded-xl transition-colors"
+                title="Cerrar sesión segura"
               >
                 <LogOut className="w-4 h-4" />
               </button>
             </div>
           )}
+
         </div>
 
       </div>

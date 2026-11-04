@@ -8,15 +8,19 @@ import AdminDashboard from '@/components/AdminDashboard';
 import EmployeePortal from '@/components/EmployeePortal';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { RefreshCw } from 'lucide-react';
+import CoopLogo from '@/components/CoopLogo';
 
 function MainApp() {
   const { user, loading } = useAuth();
 
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#06120d] text-stone-200">
-        <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin mb-3" />
-        <p className="text-xs font-semibold tracking-wider text-emerald-300 font-mono">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#071512] text-[#F5F7F5]">
+        <div className="relative mb-4">
+          <CoopLogo size={56} className="w-14 h-14" />
+          <div className="absolute -inset-1 rounded-full border-2 border-[#00A878] border-t-transparent animate-spin" />
+        </div>
+        <p className="text-xs font-bold tracking-widest text-[#00A878] uppercase font-mono">
           Iniciando sistema...
         </p>
       </div>
@@ -31,16 +35,22 @@ function MainApp() {
     );
   }
 
+  // Si es Administrador: Dashboard SaaS completo con barra lateral institucional
+  if (user.role === 'admin') {
+    return (
+      <ErrorBoundary fallbackTitle="Panel de control">
+        <AdminDashboard />
+      </ErrorBoundary>
+    );
+  }
+
+  // Si es Empleado: Portal táctil móvil y de escritorio con cabecera superior
   return (
-    <div className="min-h-screen bg-[#08140f] text-stone-100 flex flex-col selection:bg-emerald-600 selection:text-white">
+    <div className="min-h-screen bg-[#071512] text-[#F5F7F5] flex flex-col selection:bg-[#00A878] selection:text-white">
       <Navbar />
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 py-5 sm:py-6">
-        <ErrorBoundary fallbackTitle="Panel de control">
-          {user.role === 'admin' ? (
-            <AdminDashboard />
-          ) : (
-            <EmployeePortal />
-          )}
+      <main className="flex-1 max-w-4xl w-full mx-auto px-3 sm:px-6 py-6">
+        <ErrorBoundary fallbackTitle="Portal del empleado">
+          <EmployeePortal />
         </ErrorBoundary>
       </main>
     </div>
