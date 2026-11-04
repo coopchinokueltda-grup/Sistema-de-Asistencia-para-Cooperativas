@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin, isSupabaseAdminConfigured } from '@/lib/supabase/admin';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 
 // PUT: Actualizar datos de un empleado (incluida foto, horario, cargo, etc.)
 export async function PUT(req: NextRequest) {
@@ -11,7 +12,11 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: 'Identificador de empleado no proporcionado.' }, { status: 400 });
     }
 
-    if (isSupabaseAdminConfigured && supabaseAdmin) {
+    const client = (isSupabaseAdminConfigured && supabaseAdmin) 
+      ? supabaseAdmin 
+      : (isSupabaseConfigured && supabase ? supabase : null);
+
+    if (client) {
       const updatePayload: Record<string, any> = {};
       if (full_name !== undefined) updatePayload.full_name = full_name.trim();
       if (document_id !== undefined) updatePayload.document_id = document_id.trim();
@@ -23,7 +28,7 @@ export async function PUT(req: NextRequest) {
       if (avatar_url !== undefined) updatePayload.avatar_url = avatar_url;
       if (is_active !== undefined) updatePayload.is_active = is_active;
 
-      const { data, error } = await supabaseAdmin
+      const { data, error } = await client
         .from('profiles')
         .update(updatePayload)
         .eq('id', id)
@@ -31,13 +36,21 @@ export async function PUT(req: NextRequest) {
         .single();
 
       if (error) {
+        if (error.message && error.message.includes('avatar_url')) {
+          return NextResponse.json({
+            error: 'Falta la columna avatar_url en Supabase. Ejecute: ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;'
+          }, { status: 400 });
+        }
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
-      // Si cambió el nombre, actualizar los metadatos de auth
-      if (full_name) {
+      // Si se cuenta con cliente de administración y cambió el nombre o foto, sincronizar auth
+      if (isSupabaseAdminConfigured && supabaseAdmin && full_name) {
         await supabaseAdmin.auth.admin.updateUserById(id, {
-          user_metadata: { full_name: full_name.trim() }
+          user_metadata: { 
+            full_name: full_name.trim(),
+            ...(avatar_url ? { avatar_url } : {})
+          }
         }).catch(() => {});
       }
 
@@ -60,12 +73,18 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Identificador de empleado no proporcionado.' }, { status: 400 });
     }
 
-    if (isSupabaseAdminConfigured && supabaseAdmin) {
-      // 1. Eliminar de la tabla profiles
-      await supabaseAdmin.from('profiles').delete().eq('id', id);
+    const client = (isSupabaseAdminConfigured && supabaseAdmin) 
+      ? supabaseAdmin 
+      : (isSupabaseConfigured && supabase ? supabase : null);
 
-      // 2. Eliminar de auth.users si existe
-      await supabaseAdmin.auth.admin.deleteUser(id).catch(() => {});
+    if (client) {
+      // 1. Eliminar de la tabla profiles
+      await client.from('profiles').delete().eq('id', id);
+
+      // 2. Eliminar de auth.users si se cuenta con permisos admin
+      if (isSupabaseAdminConfigured && supabaseAdmin) {
+        await supabaseAdmin.auth.admin.deleteUser(id).catch(() => {});
+      }
 
       return NextResponse.json({ success: true, message: 'Empleado eliminado exitosamente.' });
     }

@@ -4,7 +4,7 @@ import { supabaseAdmin, isSupabaseAdminConfigured } from '@/lib/supabase/admin';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { email, password, full_name, document_id, role, position, department, schedule_start, schedule_end, phone } = body;
+    const { email, password, full_name, document_id, role, position, department, schedule_start, schedule_end, phone, avatar_url } = body;
 
     if (!email || !password || !full_name || !document_id) {
       return NextResponse.json(
@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
         user_metadata: {
           full_name,
           role: role || 'employee',
+          avatar_url: avatar_url || null,
         },
       });
 
@@ -36,22 +37,28 @@ export async function POST(req: NextRequest) {
       }
 
       // 2. Insertar o actualizar en la tabla profiles
+      const profileData: Record<string, any> = {
+        id: authUser.user.id,
+        full_name,
+        document_id,
+        role: role || 'employee',
+        email,
+        phone: phone || null,
+        position: position || 'Empleado',
+        department: department || 'General',
+        schedule_start: schedule_start || '08:00:00',
+        schedule_end: schedule_end || '17:00:00',
+        qr_token: qrToken,
+        is_active: true,
+      };
+
+      if (avatar_url) {
+        profileData.avatar_url = avatar_url;
+      }
+
       const { error: profileError } = await supabaseAdmin
         .from('profiles')
-        .insert({
-          id: authUser.user.id,
-          full_name,
-          document_id,
-          role: role || 'employee',
-          email,
-          phone: phone || null,
-          position: position || 'Empleado',
-          department: department || 'General',
-          schedule_start: schedule_start || '08:00:00',
-          schedule_end: schedule_end || '17:00:00',
-          qr_token: qrToken,
-          is_active: true,
-        });
+        .insert(profileData);
 
       if (profileError) {
         return NextResponse.json({ error: profileError.message }, { status: 500 });

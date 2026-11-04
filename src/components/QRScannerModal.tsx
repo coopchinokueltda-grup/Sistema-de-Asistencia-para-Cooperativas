@@ -11,7 +11,9 @@ import {
   RefreshCw, 
   Flashlight, 
   SwitchCamera, 
-  ShieldCheck 
+  ShieldCheck,
+  Upload,
+  ImageIcon
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -52,6 +54,7 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
+  const scanFrameRef = useRef<() => void>();
 
   const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const [torchOn, setTorchOn] = useState(false);
@@ -95,6 +98,7 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    setCameraReady(false);
   }, []);
 
   // Procesa el token QR detectado
@@ -156,29 +160,21 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
     }
   }, [isProcessing, successData, user, employees, recordAttendanceMark, recordType, stopCamera, onSuccess]);
 
-  // Bucle de escaneo continuo con motor jsQR universal de alta compatibilidad
-  const scanFrame = () => {
-    try {
-      if (!videoRef.current || videoRef.current.readyState < 2) {
-        animationFrameRef.current = requestAnimationFrame(scanFrame);
-        return;
-      }
-
-      scanWithJsQR(videoRef.current);
-    } catch {
-      animationFrameRef.current = requestAnimationFrame(scanFrame);
-    }
-  };
-
-  const scanWithJsQR = (video: HTMLVideoElement) => {
-    if (!canvasRef.current) return;
+  // Decodificación con jsQR sobre el fotograma de video
+  const scanWithJsQR = useCallback((video: HTMLVideoElement) => {
+    if (!canvasRef.current || isProcessing || successData) return;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
     try {
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        animationFrameRef.current = requestAnimationFrame(() => scanFrameRef.current?.());
+        return;
+      }
+
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(imageData.data, imageData.width, imageData.height, {
@@ -188,14 +184,32 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
       if (code && code.data) {
         handleScannedValue(code.data);
       } else {
-        animationFrameRef.current = requestAnimationFrame(scanFrame);
+        animationFrameRef.current = requestAnimationFrame(() => scanFrameRef.current?.());
       }
     } catch {
-      animationFrameRef.current = requestAnimationFrame(scanFrame);
+      animationFrameRef.current = requestAnimationFrame(() => scanFrameRef.current?.());
     }
-  };
+  }, [handleScannedValue, isProcessing, successData]);
 
-  // Iniciar cámara nativa sin librerías invasivas
+  // Bucle de escaneo continuo estable
+  const scanFrame = useCallback(() => {
+    try {
+      if (!videoRef.current || videoRef.current.readyState < 2) {
+        animationFrameRef.current = requestAnimationFrame(() => scanFrameRef.current?.());
+        return;
+      }
+
+      scanWithJsQR(videoRef.current);
+    } catch {
+      animationFrameRef.current = requestAnimationFrame(() => scanFrameRef.current?.());
+    }
+  }, [scanWithJsQR]);
+
+  useEffect(() => {
+    scanFrameRef.current = scanFrame;
+  }, [scanFrame]);
+
+  // Iniciar cámara nativa sin bucles de re-renderizado
   useEffect(() => {
     let active = true;
 
@@ -204,20 +218,30 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
         setErrorMsg(null);
         setCameraReady(false);
 
+        if (typeof window === 'undefined') return;
+
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error('Este navegador o dispositivo no soporta acceso a la cámara.');
+          throw new Error('La cámara no está disponible o requiere conexión segura HTTPS.');
         }
 
-        const constraints: MediaStreamConstraints = {
-          audio: false,
-          video: {
-            facingMode: { ideal: facingMode },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-          },
-        };
+        let stream: MediaStream | null = null;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              facingMode: { ideal: facingMode },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+          });
+        } catch {
+          // Fallback con restricciones mínimas si falla la resolución ideal
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: facingMode ? { facingMode: { ideal: facingMode } } : true,
+          });
+        }
 
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         if (!active) {
           stream.getTracks().forEach(t => t.stop());
           return;
@@ -234,17 +258,24 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
         }
 
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.setAttribute('playsinline', 'true');
-          try {
-            await videoRef.current.play();
-          } catch (playErr) {
-            console.warn('Video play deferral:', playErr);
-          }
-          if (active) {
-            setCameraReady(true);
-            animationFrameRef.current = requestAnimationFrame(scanFrame);
-          }
+          const video = videoRef.current;
+          video.srcObject = stream;
+          video.muted = true;
+          video.setAttribute('playsinline', 'true');
+          video.setAttribute('webkit-playsinline', 'true');
+
+          video.onloadedmetadata = async () => {
+            if (!active) return;
+            try {
+              await video.play();
+            } catch (playErr) {
+              console.warn('Video play deferral:', playErr);
+            }
+            if (active) {
+              setCameraReady(true);
+              animationFrameRef.current = requestAnimationFrame(() => scanFrameRef.current?.());
+            }
+          };
         }
       } catch (err: any) {
         if (active) {
@@ -254,7 +285,7 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
           } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
             setErrorMsg('No se detectó ninguna cámara disponible en este dispositivo.');
           } else {
-            setErrorMsg(err.message || 'No fue posible iniciar la cámara en este dispositivo.');
+            setErrorMsg(err.message || 'No fue posible iniciar la cámara. Verifique que ingrese con HTTPS.');
           }
         }
       }
@@ -266,7 +297,7 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
       active = false;
       stopCamera();
     };
-  }, [facingMode, scanFrame, stopCamera]);
+  }, [facingMode, stopCamera]);
 
   const toggleTorch = async () => {
     if (!streamRef.current) return;
@@ -284,6 +315,37 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
   const switchCameraFacing = () => {
     stopCamera();
     setFacingMode(prev => (prev === 'environment' ? 'user' : 'environment'));
+  };
+
+  // Escaneo alternativo mediante archivo / foto seleccionada de la galería
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setErrorMsg(null);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'attemptBoth',
+        });
+        if (code && code.data) {
+          handleScannedValue(code.data);
+        } else {
+          setErrorMsg('No se detectó ningún código QR en la imagen seleccionada. Intente con una foto más clara.');
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   return (
@@ -322,7 +384,7 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
             <button
               onClick={switchCameraFacing}
               className="p-1.5 text-[#A5B4AC] hover:text-white rounded-xl transition-colors"
-              title="Cambiar cámara"
+              title="Cambiar cámara (frontal/trasera)"
             >
               <SwitchCamera className="w-4 h-4" />
             </button>
@@ -335,7 +397,7 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
           </div>
         </div>
 
-        {/* Visor */}
+        {/* Visor de Cámara */}
         <div className="p-4 flex flex-col items-center">
           {successData ? (
             <div className="py-6 px-3 flex flex-col items-center text-center w-full animate-fadeIn">
@@ -381,16 +443,16 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
               </button>
             </div>
           ) : (
-            <div className="w-full flex flex-col items-center">
+            <div className="w-full flex flex-col items-center space-y-3">
               {errorMsg ? (
-                <div className="p-5 bg-rose-950/40 border border-[#EF5350]/60 rounded-2xl text-center space-y-2.5 my-3 w-full">
-                  <AlertTriangle className="w-8 h-8 text-[#EF5350] mx-auto" />
+                <div className="p-4 bg-rose-950/40 border border-[#EF5350]/60 rounded-2xl text-center space-y-2.5 my-2 w-full">
+                  <AlertTriangle className="w-7 h-7 text-[#EF5350] mx-auto" />
                   <p className="text-xs text-rose-200 leading-relaxed">{errorMsg}</p>
                   <button
                     onClick={() => { setErrorMsg(null); setFacingMode('environment'); }}
                     className="px-3.5 py-1.5 bg-[#162720] hover:bg-[#203B30] text-xs font-semibold text-white rounded-lg inline-flex items-center gap-1.5 mx-auto transition-colors"
                   >
-                    <RefreshCw className="w-3 h-3" /> Reintentar
+                    <RefreshCw className="w-3 h-3" /> Reintentar cámara
                   </button>
                 </div>
               ) : (
@@ -432,8 +494,22 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
                 </div>
               )}
 
+              {/* Botón de contingencia: Cargar foto o captura con QR */}
+              <div className="w-full pt-1">
+                <label className="w-full cursor-pointer py-2.5 px-3 bg-[#162720] hover:bg-[#203B30] text-[#00A878] rounded-2xl border border-[#203B30] text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm">
+                  <ImageIcon className="w-4 h-4 text-[#F5B942]" />
+                  <span>Subir foto con QR desde galería o archivo</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                </label>
+              </div>
+
               {/* Barra de Telemetría GPS */}
-              <div className="mt-3.5 w-full bg-[#071512] px-3.5 py-2 rounded-2xl border border-[#203B30] flex items-center justify-between text-[11px] text-[#A5B4AC] font-mono">
+              <div className="w-full bg-[#071512] px-3.5 py-2 rounded-2xl border border-[#203B30] flex items-center justify-between text-[11px] text-[#A5B4AC] font-mono">
                 <div className="flex items-center space-x-2">
                   <MapPin className={`w-3.5 h-3.5 ${gpsStatus ? 'text-[#00A878]' : 'text-stone-600 animate-pulse'}`} />
                   <span>

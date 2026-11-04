@@ -441,6 +441,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Actualizar datos de un empleado existente (incluida foto, horarios, cargo, etc.)
   const updateEmployee = async (id: string, updates: Partial<Profile>): Promise<{ success: boolean; error?: string }> => {
     try {
+      // 1. Sincronización directa con Supabase desde el cliente si está disponible
+      if (isSupabaseConfigured && supabase) {
+        try {
+          const { error: dbErr } = await supabase
+            .from('profiles')
+            .update(updates)
+            .eq('id', id);
+          if (dbErr) {
+            console.warn('Actualización cliente Supabase avisó:', dbErr.message);
+          }
+        } catch (dbEx) {
+          console.warn('Excepción de actualización cliente Supabase:', dbEx);
+        }
+      }
+
+      // 2. Llamar al endpoint administrativo para sincronización completa y auth.users
       const res = await fetch('/api/admin/employee', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -475,6 +491,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Eliminar un empleado
   const deleteEmployee = async (id: string): Promise<{ success: boolean; error?: string }> => {
     try {
+      // 1. Eliminación directa desde el cliente si está disponible
+      if (isSupabaseConfigured && supabase) {
+        try {
+          await supabase.from('profiles').delete().eq('id', id);
+        } catch (dErr) {
+          console.warn('Eliminación directa cliente Supabase:', dErr);
+        }
+      }
+
+      // 2. Llamar al endpoint administrativo
       const res = await fetch(`/api/admin/employee?id=${id}`, {
         method: 'DELETE',
       });

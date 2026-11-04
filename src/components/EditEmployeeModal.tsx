@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Profile } from '@/types';
 import { useAuth } from '@/context/AuthContext';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 import { 
   X, 
   Upload, 
@@ -90,6 +91,31 @@ export default function EditEmployeeModal({ employee, onClose }: Props) {
     setLoading(true);
     setErrorMsg(null);
 
+    let finalAvatar = avatarUrl;
+
+    // Si la foto es un DataUrl nuevo y Supabase está configurado, intentar subirla a Storage
+    if (avatarUrl && avatarUrl.startsWith('data:image/') && isSupabaseConfigured && supabase) {
+      try {
+        const resBlob = await fetch(avatarUrl);
+        const blob = await resBlob.blob();
+        const fileName = `${employee.id}_${Date.now()}.jpg`;
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('employee-photos')
+          .upload(fileName, blob, { contentType: 'image/jpeg', upsert: true });
+
+        if (!uploadErr && uploadData) {
+          const { data: publicData } = supabase.storage
+            .from('employee-photos')
+            .getPublicUrl(fileName);
+          if (publicData?.publicUrl) {
+            finalAvatar = publicData.publicUrl;
+          }
+        }
+      } catch (storageEx) {
+        console.warn('Almacenamiento en bucket opcional omitido:', storageEx);
+      }
+    }
+
     const res = await updateEmployee(employee.id, {
       full_name: fullName.trim(),
       document_id: documentId.trim(),
@@ -98,7 +124,7 @@ export default function EditEmployeeModal({ employee, onClose }: Props) {
       schedule_start: `${scheduleStart}:00`,
       schedule_end: `${scheduleEnd}:00`,
       phone: phone.trim(),
-      avatar_url: avatarUrl || undefined,
+      avatar_url: finalAvatar || undefined,
       is_active: isActive,
     });
 
