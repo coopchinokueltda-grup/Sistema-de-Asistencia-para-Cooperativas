@@ -6,11 +6,28 @@
   body {
     -webkit-tap-highlight-color: transparent;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    background-color: #07130e;
+    color: #f5f5f4;
   }
 
-  /* Cifras tabulares uniformes para relojes y códigos */
   .font-mono {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Scrollbars refinadas para tablas densas */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #091710;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1e3a2b;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #059669;
   }
 }
 
