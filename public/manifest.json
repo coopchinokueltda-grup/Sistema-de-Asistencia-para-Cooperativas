@@ -1,0 +1,20 @@
+{
+  "name": "Control de Asistencia - Cooperativa Chinokue",
+  "short_name": "Asistencia QR",
+  "description": "Sistema de registro y control de asistencia laboral con código QR y geolocalización",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#064e3b",
+  "theme_color": "#059669",
+  "orientation": "portrait-primary",
+  "lang": "es",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
