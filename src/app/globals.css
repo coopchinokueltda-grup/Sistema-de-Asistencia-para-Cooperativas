@@ -62,20 +62,49 @@
   animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* Reglas de impresión para el Carnet de Identificación ISO CR80 */
+/* ======================================================== */
+/* REGLAS DE IMPRESIÓN OFICIAL PARA TARJETA PVC CR80        */
+/* Medida ISO/IEC 7810 ID-1: 53.98 mm × 85.60 mm            */
+/* ======================================================== */
+@page {
+  size: 54mm 85.6mm;
+  margin: 0;
+}
+
 @media print {
-  body {
-    background-color: white !important;
-    color: black !important;
-  }
-
-  header, nav, aside, button, .print\\:hidden {
-    display: none !important;
-  }
-
-  .print-area {
-    display: block !important;
+  html, body {
+    width: 54mm !important;
+    height: 85.6mm !important;
     margin: 0 !important;
     padding: 0 !important;
+    background-color: #FFFFFF !important;
+    color: #000000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  header, nav, aside, button, .print\\:hidden, #app-navbar {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Ajuste 1:1 milimétrico exacto para tarjetas de plástico PVC o papel */
+  #chinokue-employee-badge {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 53.98mm !important;
+    height: 85.60mm !important;
+    max-width: 53.98mm !important;
+    max-height: 85.60mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

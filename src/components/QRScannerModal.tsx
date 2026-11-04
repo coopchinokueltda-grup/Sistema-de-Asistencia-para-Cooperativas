@@ -156,37 +156,18 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
     }
   }, [isProcessing, successData, user, employees, recordAttendanceMark, recordType, stopCamera, onSuccess]);
 
-  // Bucle de escaneo continuo
+  // Bucle de escaneo continuo con motor jsQR universal de alta compatibilidad
   const scanFrame = () => {
-    if (!videoRef.current || videoRef.current.readyState < 2) {
-      animationFrameRef.current = requestAnimationFrame(scanFrame);
-      return;
-    }
-
-    const video = videoRef.current;
-
-    if ('BarcodeDetector' in window) {
-      try {
-        const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
-        detector.detect(video)
-          .then((barcodes: any[]) => {
-            if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-              handleScannedValue(barcodes[0].rawValue);
-            } else {
-              animationFrameRef.current = requestAnimationFrame(scanFrame);
-            }
-          })
-          .catch(() => {
-            scanWithJsQR(video);
-          });
-        return;
-      } catch {
-        scanWithJsQR(video);
+    try {
+      if (!videoRef.current || videoRef.current.readyState < 2) {
+        animationFrameRef.current = requestAnimationFrame(scanFrame);
         return;
       }
-    }
 
-    scanWithJsQR(video);
+      scanWithJsQR(videoRef.current);
+    } catch {
+      animationFrameRef.current = requestAnimationFrame(scanFrame);
+    }
   };
 
   const scanWithJsQR = (video: HTMLVideoElement) => {
@@ -195,10 +176,9 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return;
 
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-
     try {
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(imageData.data, imageData.width, imageData.height, {
@@ -256,7 +236,11 @@ export default function QRScannerModal({ recordType, onClose, onSuccess }: Props
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.setAttribute('playsinline', 'true');
-          await videoRef.current.play();
+          try {
+            await videoRef.current.play();
+          } catch (playErr) {
+            console.warn('Video play deferral:', playErr);
+          }
           if (active) {
             setCameraReady(true);
             animationFrameRef.current = requestAnimationFrame(scanFrame);

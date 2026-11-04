@@ -23,9 +23,9 @@ export default function AdminAttendanceCharts({ records, employees }: Props) {
     // Capitalizar primera letra
     const label = dayName.charAt(0).toUpperCase() + dayName.slice(1, 3);
     
-    // Contar empleados únicos que marcaron entrada en este día
-    const dayRecords = records.filter(r => r.timestamp_local.startsWith(isoDate) && r.record_type === 'entrada');
-    const uniqueEmployees = new Set(dayRecords.map(r => r.employee_id || r.employee?.id)).size;
+    // Contar empleados únicos que marcaron entrada en este día (con validación segura)
+    const dayRecords = (records || []).filter(r => (r?.timestamp_local || '').startsWith(isoDate) && r?.record_type === 'entrada');
+    const uniqueEmployees = new Set(dayRecords.map(r => r?.employee_id || r?.employee?.id)).size;
     const ausentes = Math.max(0, employees.length - uniqueEmployees);
 
     return {
@@ -38,7 +38,7 @@ export default function AdminAttendanceCharts({ records, employees }: Props) {
 
   // Datos para el Resumen General (del día actual)
   const todayIso = new Date().toISOString().split('T')[0];
-  const todayEntradas = records.filter(r => r.timestamp_local.startsWith(todayIso) && r.record_type === 'entrada');
+  const todayEntradas = (records || []).filter(r => (r?.timestamp_local || '').startsWith(todayIso) && r?.record_type === 'entrada');
   const todayPresentes = new Set(todayEntradas.map(r => r.employee_id || r.employee?.id)).size;
   const totalEmployees = Math.max(employees.length, 1);
   const todayAusentes = Math.max(0, totalEmployees - todayPresentes);

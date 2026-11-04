@@ -18,8 +18,8 @@ import {
   Mail,
   Phone,
   Sparkles,
-  KeyRound,
-  ShieldCheck
+  Camera,
+  Trash2
 } from 'lucide-react';
 import { downloadEmployeeTemplate, parseEmployeesFromExcel } from '@/lib/excel';
 import EmployeeBadgeCard from './EmployeeBadgeCard';
@@ -43,6 +43,7 @@ export default function EmployeeManagementModal({ onClose }: Props) {
     schedule_start: '08:00:00',
     schedule_end: '17:00:00',
     role: 'employee',
+    avatar_url: undefined,
   });
 
   const [loading, setLoading] = useState(false);
@@ -54,6 +55,47 @@ export default function EmployeeManagementModal({ onClose }: Props) {
 
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [importResults, setImportResults] = useState<{ count: number; credentials: EmployeeCredentials[] } | null>(null);
+
+  // Procesar foto seleccionada
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setErrorMsg('Seleccione un archivo de imagen válido.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxW = 320;
+        const maxH = 400;
+        let w = img.width;
+        let h = img.height;
+
+        if (w > maxW || h > maxH) {
+          const ratio = Math.min(maxW / w, maxH / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          const compressed = canvas.toDataURL('image/jpeg', 0.85);
+          setFormData(prev => ({ ...prev, avatar_url: compressed }));
+          setErrorMsg(null);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmitIndividual = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,6 +119,7 @@ export default function EmployeeManagementModal({ onClose }: Props) {
         schedule_start: '08:00:00',
         schedule_end: '17:00:00',
         role: 'employee',
+        avatar_url: undefined,
       });
     } catch (err: any) {
       setErrorMsg(err.message || 'Error al registrar.');
@@ -125,7 +168,7 @@ export default function EmployeeManagementModal({ onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md overflow-y-auto animate-fadeIn">
       <div className="bg-[#101E1A] rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden border border-[#203B30] text-[#F5F7F5]">
         
         {/* Cabecera */}
@@ -134,7 +177,7 @@ export default function EmployeeManagementModal({ onClose }: Props) {
             <CoopLogo size={32} className="w-8 h-8" />
             <div>
               <h3 className="font-bold text-sm text-white">Registro de Personal</h3>
-              <p className="text-[11px] text-[#A5B4AC]">Creación de usuarios y carnets QR oficiales</p>
+              <p className="text-[11px] text-[#A5B4AC]">Alta de usuario, credenciales y carnet oficial</p>
             </div>
           </div>
           <button
@@ -237,6 +280,41 @@ export default function EmployeeManagementModal({ onClose }: Props) {
 
           {activeTab === 'individual' ? (
             <form onSubmit={handleSubmitIndividual} className="space-y-3.5">
+              
+              {/* Carga de Foto para el Carnet */}
+              <div className="p-3 bg-[#162720] rounded-2xl border border-[#203B30] flex items-center space-x-3.5">
+                <div className="w-14 h-16 rounded-xl overflow-hidden bg-[#071512] border border-[#D6A72C]/60 shrink-0 shadow flex items-center justify-center">
+                  {formData.avatar_url ? (
+                    <img src={formData.avatar_url} alt="Previsualización" className="w-full h-full object-cover" />
+                  ) : (
+                    <Camera className="w-5 h-5 text-[#A5B4AC] opacity-60" />
+                  )}
+                </div>
+
+                <div className="flex-1">
+                  <span className="text-xs font-bold text-white block">
+                    Fotografía para el carnet (Opcional)
+                  </span>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <label className="cursor-pointer px-3 py-1 bg-[#101E1A] hover:bg-[#203B30] text-[#00A878] text-[11px] font-bold rounded-xl border border-[#203B30] transition-all inline-flex items-center gap-1.5">
+                      <Upload className="w-3 h-3" />
+                      <span>{formData.avatar_url ? 'Cambiar Foto' : 'Adjuntar Foto'}</span>
+                      <input type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
+                    </label>
+                    {formData.avatar_url && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData(p => ({ ...p, avatar_url: undefined }))}
+                        className="p-1 text-[#EF5350] hover:bg-rose-950/40 rounded-lg text-xs"
+                        title="Quitar"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                 <div>
                   <label className="block text-xs font-semibold text-[#A5B4AC] mb-1">
@@ -406,7 +484,6 @@ export default function EmployeeManagementModal({ onClose }: Props) {
 
       </div>
 
-      {/* Carnet Modal si se requiere imprimir de inmediato */}
       {badgeEmployee && (
         <EmployeeBadgeCard
           employee={badgeEmployee}

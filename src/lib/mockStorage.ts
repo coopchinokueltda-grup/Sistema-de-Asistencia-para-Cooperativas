@@ -1,4 +1,4 @@
-import { Profile, AttendanceRecord, SystemSettings } from '@/types';
+import { Profile, AttendanceRecord, SystemSettings, EmployeeLeave } from '@/types';
 
 export const INITIAL_SETTINGS: SystemSettings = {
   id: 'config',
@@ -17,6 +17,7 @@ export const INITIAL_SETTINGS: SystemSettings = {
 // Sin datos simulados ni empleados ficticios
 export const INITIAL_PROFILES: Profile[] = [];
 export const INITIAL_ATTENDANCE: AttendanceRecord[] = [];
+export const INITIAL_LEAVES: EmployeeLeave[] = [];
 
 export const STORAGE_KEYS = {
   USER: 'chinokue_auth_user',
@@ -24,4 +25,5 @@ export const STORAGE_KEYS = {
   ATTENDANCE: 'chinokue_attendance',
   SETTINGS: 'chinokue_settings',
   CREDENTIALS: 'chinokue_generated_credentials',
+  LEAVES: 'chinokue_employee_leaves',
 };

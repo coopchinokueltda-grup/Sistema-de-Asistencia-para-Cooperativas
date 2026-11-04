@@ -51,15 +51,16 @@ export default function AdminAttendanceTable({
   const [manualEmpId, setManualEmpId] = useState('');
   const [manualType, setManualType] = useState<'entrada' | 'salida'>('entrada');
 
-  // Filtrado de registros
-  const filteredRecords = records.filter(rec => {
-    const empName = rec.employee?.full_name?.toLowerCase() || '';
-    const empDoc = rec.employee?.document_id?.toLowerCase() || '';
+  // Filtrado de registros con validación segura
+  const filteredRecords = (records || []).filter(rec => {
+    const empName = rec?.employee?.full_name?.toLowerCase() || '';
+    const empDoc = rec?.employee?.document_id?.toLowerCase() || '';
     const term = searchTerm.toLowerCase();
 
-    const matchesSearch = !term || empName.includes(term) || empDoc.includes(term) || rec.timestamp_local.includes(term);
-    const matchesType = typeFilter === 'all' || rec.record_type === typeFilter;
-    const matchesStatus = statusFilter === 'all' || rec.status === statusFilter;
+    const timeStr = rec?.timestamp_local || '';
+    const matchesSearch = !term || empName.includes(term) || empDoc.includes(term) || timeStr.includes(term);
+    const matchesType = typeFilter === 'all' || rec?.record_type === typeFilter;
+    const matchesStatus = statusFilter === 'all' || rec?.status === statusFilter;
 
     return matchesSearch && matchesType && matchesStatus;
   });
@@ -95,7 +96,8 @@ export default function AdminAttendanceTable({
   };
 
   // Función para formatear fecha secundaria (ej: "Mar, 04 de Noviembre")
-  const formatSecondaryDate = (localIso: string) => {
+  const formatSecondaryDate = (localIso?: string) => {
+    if (!localIso) return '';
     try {
       const parts = localIso.split(' ')[0].split('-');
       const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
@@ -106,7 +108,7 @@ export default function AdminAttendanceTable({
       });
       return formatted.charAt(0).toUpperCase() + formatted.slice(1);
     } catch {
-      return localIso.split(' ')[0];
+      return localIso ? localIso.split(' ')[0] : '';
     }
   };
 
@@ -264,8 +266,12 @@ export default function AdminAttendanceTable({
                       {/* Trabajador & Puesto con Avatar */}
                       <td className="py-3 px-4">
                         <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#00A878] to-[#063D32] border border-[#203B30] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-sm">
-                            {emp?.full_name?.charAt(0) || 'E'}
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#00A878] to-[#063D32] border border-[#203B30] flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-sm overflow-hidden">
+                            {emp?.avatar_url ? (
+                              <img src={emp.avatar_url} alt={emp.full_name} className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{emp?.full_name?.charAt(0) || 'E'}</span>
+                            )}
                           </div>
                           <div>
                             <div className="font-bold text-white text-xs group-hover:text-[#00A878] transition-colors">
@@ -324,6 +330,11 @@ export default function AdminAttendanceTable({
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-stone-900 text-stone-300 border border-stone-700">
                             <Clock className="w-3 h-3" />
                             Salida Anticipada
+                          </span>
+                        ) : rec.status === 'justificado' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-teal-950/70 text-teal-300 border border-teal-700/50">
+                            <CheckCircle2 className="w-3 h-3 text-[#00A878]" />
+                            Justificado
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-stone-900 text-stone-300 border border-stone-800">

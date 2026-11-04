@@ -33,11 +33,16 @@ import {
   ShieldCheck,
   MapPin,
   RefreshCw,
-  QrCode
+  QrCode,
+  Pencil,
+  Trash2,
+  HeartPulse
 } from 'lucide-react';
 import AdminAttendanceTable from './AdminAttendanceTable';
 import AdminAttendanceCharts from './AdminAttendanceCharts';
 import EmployeeManagementModal from './EmployeeManagementModal';
+import EditEmployeeModal from './EditEmployeeModal';
+import ManageLeavesModal from './ManageLeavesModal';
 import KioskDisplayModal from './KioskDisplayModal';
 import EmployeeBadgeCard from './EmployeeBadgeCard';
 import CoopLogo from './CoopLogo';
@@ -45,7 +50,7 @@ import { Profile } from '@/types';
 import { exportAttendanceToExcel } from '@/lib/excel';
 
 export default function AdminDashboard() {
-  const { user, employees, attendance, settings, recordAttendanceMark, updateSettings, logout } = useAuth();
+  const { user, employees, attendance, settings, recordAttendanceMark, updateSettings, logout, deleteEmployee } = useAuth();
   
   // Navegación principal en el sidebar
   const [activeTab, setActiveTab] = useState<'inicio' | 'empleados' | 'marcaciones' | 'reportes' | 'configuracion'>('inicio');
@@ -57,6 +62,9 @@ export default function AdminDashboard() {
   const [showAddEmployeeModal, setShowAddEmployeeModal] = useState(false);
   const [showKioskModal, setShowKioskModal] = useState(false);
   const [selectedEmployeeForBadge, setSelectedEmployeeForBadge] = useState<Profile | null>(null);
+  const [selectedEmployeeForEdit, setSelectedEmployeeForEdit] = useState<Profile | null>(null);
+  const [showLeavesModal, setShowLeavesModal] = useState(false);
+  const [deletingEmpId, setDeletingEmpId] = useState<string | null>(null);
 
   // Reloj y fecha en tiempo real (Zona Horaria America/Asuncion)
   const [clockString, setClockString] = useState('');
@@ -99,14 +107,30 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, [settings.timezone]);
 
-  // Cálculos estadísticos en tiempo real
+  // Cálculos estadísticos en tiempo real (con validación segura)
   const todayStr = new Date().toISOString().split('T')[0];
-  const todayRecords = attendance.filter(r => r.timestamp_local.startsWith(todayStr));
+  const todayRecords = attendance.filter(r => (r?.timestamp_local || '').startsWith(todayStr));
   const todayEntradas = todayRecords.filter(r => r.record_type === 'entrada');
   const todaySalidas = todayRecords.filter(r => r.record_type === 'salida');
   const puntuales = todayEntradas.filter(r => r.status === 'puntual').length;
   const tardanzas = todayEntradas.filter(r => r.status === 'tardanza').length;
   const puntualidadPct = todayEntradas.length > 0 ? Math.round((puntuales / todayEntradas.length) * 100) : 100;
+
+  // Manejador para eliminar empleado con confirmación
+  const handleDeleteEmployee = async (emp: Profile) => {
+    const ok = window.confirm(
+      `¿Confirma que desea dar de baja y eliminar a "${emp.full_name}" (C.I. ${emp.document_id})?\n\nEsta acción revocará su acceso al sistema y eliminará su ficha.`
+    );
+    if (!ok) return;
+
+    setDeletingEmpId(emp.id);
+    const res = await deleteEmployee(emp.id);
+    setDeletingEmpId(null);
+
+    if (!res.success) {
+      alert(res.error || 'No fue posible eliminar al empleado.');
+    }
+  };
 
   // Búsqueda en empleados
   const [employeeSearch, setEmployeeSearch] = useState('');
@@ -599,7 +623,15 @@ export default function AdminDashboard() {
                   />
                 </div>
 
-                <div className="flex items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    onClick={() => setShowLeavesModal(true)}
+                    className="px-4 py-2 bg-[#162720] hover:bg-[#203B30] text-[#00A878] font-bold text-xs rounded-2xl border border-[#00A878]/40 transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <HeartPulse className="w-3.5 h-3.5 text-[#F5B942]" />
+                    <span>Gestionar Reposo / Vacaciones</span>
+                  </button>
+
                   <button
                     onClick={() => setShowAddEmployeeModal(true)}
                     className="px-4 py-2 bg-[#00A878] hover:bg-[#008F68] text-white font-bold text-xs rounded-2xl transition-all flex items-center gap-1.5 shadow-lg shadow-[#00A878]/25"
@@ -636,8 +668,16 @@ export default function AdminDashboard() {
                           <tr key={emp.id} className="hover:bg-[#162720]/80 transition-colors">
                             <td className="py-3 px-4">
                               <div className="flex items-center space-x-3">
-                                <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#00A878] to-[#063D32] flex items-center justify-center text-white font-black text-xs shrink-0">
-                                  {emp.full_name.charAt(0)}
+                                <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-[#00A878] to-[#063D32] flex items-center justify-center text-white font-black text-xs shrink-0 overflow-hidden border border-[#00A878]/30 shadow">
+                                  {emp.avatar_url ? (
+                                    <img 
+                                      src={emp.avatar_url} 
+                                      alt={emp.full_name} 
+                                      className="w-full h-full object-cover" 
+                                    />
+                                  ) : (
+                                    <span>{emp.full_name.charAt(0)}</span>
+                                  )}
                                 </div>
                                 <div>
                                   <div className="font-bold text-white text-xs">{emp.full_name}</div>
@@ -660,14 +700,36 @@ export default function AdminDashboard() {
                                 ● Activo
                               </span>
                             </td>
-                            <td className="py-3 px-4 text-right">
-                              <button
-                                onClick={() => setSelectedEmployeeForBadge(emp)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#162720] hover:bg-[#203B30] text-[#00A878] rounded-xl border border-[#203B30] text-xs font-bold transition-all"
-                              >
-                                <QrCode className="w-3.5 h-3.5" />
-                                <span>Ver Carnet QR</span>
-                              </button>
+                            <td className="py-3 px-4 text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => setSelectedEmployeeForBadge(emp)}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#162720] hover:bg-[#203B30] text-[#00A878] rounded-xl border border-[#203B30] text-xs font-bold transition-all"
+                                  title="Ver / Imprimir Carnet QR CR80"
+                                >
+                                  <QrCode className="w-3.5 h-3.5" />
+                                  <span className="hidden sm:inline">Carnet QR</span>
+                                </button>
+
+                                <button
+                                  onClick={() => setSelectedEmployeeForEdit(emp)}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#162720] hover:bg-[#203B30] text-stone-200 hover:text-white rounded-xl border border-[#203B30] text-xs font-bold transition-all"
+                                  title="Editar datos y foto del empleado"
+                                >
+                                  <Pencil className="w-3.5 h-3.5 text-[#00A878]" />
+                                  <span className="hidden sm:inline">Editar</span>
+                                </button>
+
+                                <button
+                                  onClick={() => handleDeleteEmployee(emp)}
+                                  disabled={deletingEmpId === emp.id || emp.role === 'admin'}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-[#162720] hover:bg-rose-950/60 text-[#EF5350] rounded-xl border border-[#203B30] hover:border-rose-900/60 text-xs font-bold transition-all disabled:opacity-40"
+                                  title="Eliminar empleado"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span className="hidden sm:inline">Eliminar</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -894,6 +956,21 @@ export default function AdminDashboard() {
         <KioskDisplayModal
           settings={settings}
           onClose={() => setShowKioskModal(false)}
+        />
+      )}
+
+      {/* Modal de Edición de Empleado y Foto */}
+      {selectedEmployeeForEdit && (
+        <EditEmployeeModal
+          employee={selectedEmployeeForEdit}
+          onClose={() => setSelectedEmployeeForEdit(null)}
+        />
+      )}
+
+      {/* Modal de Gestión de Reposos y Vacaciones */}
+      {showLeavesModal && (
+        <ManageLeavesModal
+          onClose={() => setShowLeavesModal(false)}
         />
       )}
 

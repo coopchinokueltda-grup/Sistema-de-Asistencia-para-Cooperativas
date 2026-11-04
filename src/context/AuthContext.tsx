@@ -1,11 +1,12 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Profile, AttendanceRecord, SystemSettings, EmployeeCredentials } from '@/types';
+import { Profile, AttendanceRecord, SystemSettings, EmployeeCredentials, EmployeeLeave } from '@/types';
 import { 
   INITIAL_PROFILES, 
   INITIAL_ATTENDANCE, 
   INITIAL_SETTINGS, 
+  INITIAL_LEAVES,
   STORAGE_KEYS 
 } from '@/lib/mockStorage';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
@@ -17,11 +18,16 @@ interface AuthContextType {
   attendance: AttendanceRecord[];
   settings: SystemSettings;
   generatedCredentials: EmployeeCredentials[];
+  leaves: EmployeeLeave[];
   hasAnyAdmin: boolean;
   login: (identifier: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   createInitialAdmin: (data: { full_name: string; document_id: string; email: string; password: string }) => Promise<{ success: boolean; error?: string }>;
   registerEmployee: (data: Partial<Profile>) => Promise<{ success: boolean; credentials?: EmployeeCredentials; error?: string }>;
+  updateEmployee: (id: string, updates: Partial<Profile>) => Promise<{ success: boolean; error?: string }>;
+  deleteEmployee: (id: string) => Promise<{ success: boolean; error?: string }>;
+  registerEmployeeLeave: (leaveData: Omit<EmployeeLeave, 'id' | 'created_at'>) => Promise<{ success: boolean; error?: string }>;
+  deleteEmployeeLeave: (id: string) => Promise<{ success: boolean; error?: string }>;
   recordAttendanceMark: (
     type: 'entrada' | 'salida',
     employeeId?: string,
@@ -40,6 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [employees, setEmployees] = useState<Profile[]>(INITIAL_PROFILES);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(INITIAL_ATTENDANCE);
   const [settings, setSettings] = useState<SystemSettings>(INITIAL_SETTINGS);
+  const [leaves, setLeaves] = useState<EmployeeLeave[]>(INITIAL_LEAVES);
   const [generatedCredentials, setGeneratedCredentials] = useState<EmployeeCredentials[]>([]);
 
   const hasAnyAdmin = employees.some(e => e.role === 'admin');
@@ -50,23 +57,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         let loadedEmployees: Profile[] = [];
         let loadedAttendance: AttendanceRecord[] = [];
+        let loadedLeaves: EmployeeLeave[] = [];
 
-        // 1. Cargar desde LocalStorage si existen
+        // 1. Cargar desde LocalStorage si existen con validación contra errores
         if (typeof window !== 'undefined') {
-          const storedCreds = localStorage.getItem(STORAGE_KEYS.CREDENTIALS);
-          if (storedCreds) setGeneratedCredentials(JSON.parse(storedCreds));
+          try {
+            const storedCreds = localStorage.getItem(STORAGE_KEYS.CREDENTIALS);
+            if (storedCreds) setGeneratedCredentials(JSON.parse(storedCreds));
 
-          const storedProfiles = localStorage.getItem(STORAGE_KEYS.PROFILES);
-          if (storedProfiles) loadedEmployees = JSON.parse(storedProfiles);
+            const storedProfiles = localStorage.getItem(STORAGE_KEYS.PROFILES);
+            if (storedProfiles) loadedEmployees = JSON.parse(storedProfiles);
 
-          const storedAtt = localStorage.getItem(STORAGE_KEYS.ATTENDANCE);
-          if (storedAtt) loadedAttendance = JSON.parse(storedAtt);
+            const storedAtt = localStorage.getItem(STORAGE_KEYS.ATTENDANCE);
+            if (storedAtt) loadedAttendance = JSON.parse(storedAtt);
 
-          const storedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-          if (storedSettings) setSettings(JSON.parse(storedSettings));
+            const storedSettings = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+            if (storedSettings) setSettings(JSON.parse(storedSettings));
 
-          const storedUser = localStorage.getItem(STORAGE_KEYS.USER);
-          if (storedUser) setUser(JSON.parse(storedUser));
+            const storedLeaves = localStorage.getItem(STORAGE_KEYS.LEAVES);
+            if (storedLeaves) loadedLeaves = JSON.parse(storedLeaves);
+
+            const storedUser = localStorage.getItem(STORAGE_KEYS.USER);
+            if (storedUser) setUser(JSON.parse(storedUser));
+          } catch (storageErr) {
+            console.warn('Recuperación de almacenamiento local prevenida:', storageErr);
+          }
         }
 
         // 2. Si Supabase está conectado, sincronizar datos reales del servidor
@@ -122,8 +137,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        // 3. Procesar marcaciones automáticas por Vacaciones / Reposo Médico para el día actual
+        const todayStr = new Date().toISOString().split('T')[0];
+        const activeLeavesToday = loadedLeaves.filter(
+          l => l.start_date <= todayStr && l.end_date >= todayStr
+        );
+
+        if (activeLeavesToday.length > 0) {
+          let updatedAtt = [...loadedAttendance];
+          let addedAny = false;
+
+          for (const leave of activeLeavesToday) {
+            const hasMarkToday = updatedAtt.some(
+              r => r?.employee_id === leave.employee_id && (r?.timestamp_local || '').startsWith(todayStr)
+            );
+
+            if (!hasMarkToday) {
+              const emp = loadedEmployees.find(e => e.id === leave.employee_id);
+              const leaveLabel = leave.leave_type === 'vacaciones' ? 'Vacaciones' : 
+                                 leave.leave_type === 'reposo_medico' ? 'Reposo Médico' : 'Permiso Especial';
+
+              const autoRecord: AttendanceRecord = {
+                id: `auto_leave_${leave.id}_${todayStr}`,
+                employee_id: leave.employee_id,
+                record_type: 'entrada',
+                timestamp_utc: new Date().toISOString(),
+                timestamp_local: `${todayStr} 08:00:00`,
+                timezone: 'America/Asuncion',
+                scan_method: 'manual_admin',
+                status: 'justificado',
+                notes: `Marcación automática: ${leaveLabel} (${leave.reason || 'Autorizado'})`,
+                created_at: new Date().toISOString(),
+                employee: emp,
+              };
+
+              updatedAtt.unshift(autoRecord);
+              addedAny = true;
+            }
+          }
+
+          if (addedAny) {
+            loadedAttendance = updatedAtt;
+            if (typeof window !== 'undefined') {
+              localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(updatedAtt));
+            }
+          }
+        }
+
         setEmployees(loadedEmployees);
         setAttendance(loadedAttendance);
+        setLeaves(loadedLeaves);
       } catch (err) {
         console.error('Error al inicializar sesión:', err);
       } finally {
@@ -134,27 +197,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     init();
   }, []);
 
-  // Crear Administrador Inicial (Configuración de primer uso)
-  const createInitialAdmin = async (data: { full_name: string; document_id: string; email: string; password: string }): Promise<{ success: boolean; error?: string }> => {
+  // Crear administrador inicial
+  const createInitialAdmin = async (data: { full_name: string; document_id: string; email: string; password: string }) => {
     try {
-      const email = data.email.trim().toLowerCase();
-      const docClean = data.document_id.replace(/\D/g, '');
-      const qrToken = `ADM-QR-${docClean}-${Date.now().toString(36).toUpperCase()}`;
-
-      // Llamar al endpoint del servidor
       const res = await fetch('/api/admin/create-employee', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          full_name: data.full_name.trim(),
-          document_id: data.document_id.trim(),
-          email,
-          password: data.password,
+          ...data,
           role: 'admin',
-          position: 'Administrador de Personal',
+          position: 'Administrador General',
           department: 'Administración Central',
           schedule_start: '07:30:00',
-          schedule_end: '16:30:00',
+          schedule_end: '17:30:00',
         }),
       });
 
@@ -163,43 +218,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(resData.error || 'Error al crear el administrador');
       }
 
-      const adminProfile: Profile = {
+      const newAdmin: Profile = {
         id: resData.user?.id || `admin_${Date.now()}`,
         full_name: data.full_name.trim(),
         document_id: data.document_id.trim(),
         role: 'admin',
-        email,
-        position: 'Administrador de Personal',
+        email: data.email.trim(),
+        position: 'Administrador General',
         department: 'Administración Central',
         schedule_start: '07:30:00',
-        schedule_end: '16:30:00',
-        qr_token: qrToken,
+        schedule_end: '17:30:00',
+        qr_token: resData.user?.qr_token || `ADMIN-QR-${data.document_id}`,
         is_active: true,
         created_at: new Date().toISOString(),
       };
 
-      const updatedList = [adminProfile, ...employees];
+      const updatedList = [newAdmin, ...employees];
       setEmployees(updatedList);
-      setUser(adminProfile);
+      setUser(newAdmin);
 
       if (typeof window !== 'undefined') {
         localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(updatedList));
-        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(adminProfile));
+        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(newAdmin));
       }
 
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message || 'No fue posible registrar al administrador' };
+      return { success: false, error: err.message || 'Error al crear la cuenta' };
     }
   };
 
-  // Iniciar Sesión por Correo o Cédula (Sin accesos simulados)
+  // Inicio de sesión dual (Cédula o Correo)
   const login = async (identifier: string, pass: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const cleanInput = identifier.trim();
       let cleanEmail = cleanInput.toLowerCase();
 
-      // Si el usuario ingresó número de cédula (sin @), buscar el correo asociado
       if (!cleanInput.includes('@')) {
         try {
           const resLookup = await fetch('/api/auth/lookup-email', {
@@ -220,7 +274,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 1. Intentar con Supabase Auth si está configurado
+      // 1. Intentar con Supabase Auth
       if (isSupabaseConfigured && supabase) {
         const { data, error } = await supabase.auth.signInWithPassword({
           email: cleanEmail,
@@ -240,7 +294,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(profile));
             }
 
-            // Si es admin, cargar la lista completa de personal y asistencias
             if (profile.role === 'admin') {
               const { data: dbProfiles } = await supabase
                 .from('profiles')
@@ -267,13 +320,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             return { success: true };
           }
-        } else if (error) {
-          console.warn('Supabase auth error:', error.message);
-          return { success: false, error: 'Credenciales inválidas. Compruebe su correo o contraseña.' };
         }
       }
 
-      // 2. Verificación contra los perfiles guardados localmente
+      // 2. Verificación local
       const currentEmployees = typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEYS.PROFILES)
         ? JSON.parse(localStorage.getItem(STORAGE_KEYS.PROFILES)!)
         : employees;
@@ -286,7 +336,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: 'Usuario o documento no encontrado en el sistema.' };
       }
 
-      // Verificar contra credenciales temporales generadas localmente
       const storedCreds = typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEYS.CREDENTIALS)
         ? JSON.parse(localStorage.getItem(STORAGE_KEYS.CREDENTIALS)!)
         : generatedCredentials;
@@ -319,7 +368,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Registrar empleado con autogeneración de credenciales reales
+  // Registrar nuevo empleado
   const registerEmployee = async (data: Partial<Profile>): Promise<{ success: boolean; credentials?: EmployeeCredentials; error?: string }> => {
     try {
       if (!data.full_name || !data.document_id) {
@@ -329,7 +378,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const docClean = data.document_id.replace(/\D/g, '');
       const email = data.email?.trim() || `emp.${docClean}@cooperativa.com`;
       
-      // Contraseña segura generada automáticamente
       const randomSuffix = Math.floor(1000 + Math.random() * 9000);
       const generatedPassword = `Cp.${docClean || randomSuffix}#`;
       const qrToken = `EMP-QR-${docClean}-${Date.now().toString(36).toUpperCase()}`;
@@ -361,6 +409,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         schedule_start: data.schedule_start || '08:00:00',
         schedule_end: data.schedule_end || '17:00:00',
         qr_token: qrToken,
+        avatar_url: data.avatar_url || undefined,
         is_active: true,
         created_at: new Date().toISOString(),
       };
@@ -386,6 +435,134 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: true, credentials };
     } catch (err: any) {
       return { success: false, error: err.message || 'Error al registrar al empleado' };
+    }
+  };
+
+  // Actualizar datos de un empleado existente (incluida foto, horarios, cargo, etc.)
+  const updateEmployee = async (id: string, updates: Partial<Profile>): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch('/api/admin/employee', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...updates }),
+      });
+
+      const resData = await res.json();
+      if (!res.ok) {
+        throw new Error(resData.error || 'No fue posible actualizar el empleado');
+      }
+
+      const updatedList = employees.map(emp => emp.id === id ? { ...emp, ...updates, updated_at: new Date().toISOString() } : emp);
+      setEmployees(updatedList);
+
+      if (user?.id === id) {
+        setUser({ ...user, ...updates });
+      }
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(updatedList));
+        if (user?.id === id) {
+          localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify({ ...user, ...updates }));
+        }
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error al actualizar empleado' };
+    }
+  };
+
+  // Eliminar un empleado
+  const deleteEmployee = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const res = await fetch(`/api/admin/employee?id=${id}`, {
+        method: 'DELETE',
+      });
+
+      const resData = await res.json();
+      if (!res.ok) {
+        throw new Error(resData.error || 'No fue posible eliminar al empleado');
+      }
+
+      const updatedList = employees.filter(emp => emp.id !== id);
+      setEmployees(updatedList);
+
+      // Eliminar también las marcaciones asociadas en la vista local
+      const updatedAtt = attendance.filter(att => att.employee_id !== id);
+      setAttendance(updatedAtt);
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(updatedList));
+        localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(updatedAtt));
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error al eliminar empleado' };
+    }
+  };
+
+  // Registrar período de Licencia / Vacaciones / Reposo Médico
+  const registerEmployeeLeave = async (leaveData: Omit<EmployeeLeave, 'id' | 'created_at'>): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const newLeave: EmployeeLeave = {
+        ...leaveData,
+        id: `leave_${Date.now()}`,
+        created_at: new Date().toISOString(),
+      };
+
+      const updatedLeaves = [newLeave, ...leaves];
+      setLeaves(updatedLeaves);
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEYS.LEAVES, JSON.stringify(updatedLeaves));
+      }
+
+      // Si la licencia abarca el día de hoy, generar automáticamente la marcación justificada
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (newLeave.start_date <= todayStr && newLeave.end_date >= todayStr) {
+        const emp = employees.find(e => e.id === newLeave.employee_id);
+        const leaveLabel = newLeave.leave_type === 'vacaciones' ? 'Vacaciones' : 
+                           newLeave.leave_type === 'reposo_medico' ? 'Reposo Médico' : 'Permiso Especial';
+
+        const autoRecord: AttendanceRecord = {
+          id: `auto_leave_${newLeave.id}_${todayStr}`,
+          employee_id: newLeave.employee_id,
+          record_type: 'entrada',
+          timestamp_utc: new Date().toISOString(),
+          timestamp_local: `${todayStr} 08:00:00`,
+          timezone: 'America/Asuncion',
+          scan_method: 'manual_admin',
+          status: 'justificado',
+          notes: `Marcación automática: ${leaveLabel} (${newLeave.reason || 'Autorizado por Administración'})`,
+          created_at: new Date().toISOString(),
+          employee: emp,
+        };
+
+        const updatedAtt = [autoRecord, ...attendance];
+        setAttendance(updatedAtt);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(updatedAtt));
+        }
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error al registrar licencia' };
+    }
+  };
+
+  // Eliminar período de Licencia
+  const deleteEmployeeLeave = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const updatedLeaves = leaves.filter(l => l.id !== id);
+      setLeaves(updatedLeaves);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(STORAGE_KEYS.LEAVES, JSON.stringify(updatedLeaves));
+      }
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Error al eliminar licencia' };
     }
   };
 
@@ -435,7 +612,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           longitude = position.coords.longitude;
           accuracy = position.coords.accuracy;
         } catch {
-          // Si el usuario no otorga GPS, se registra igualmente con aviso
+          // Si el usuario no otorga GPS, se registra igualmente
         }
       }
 
@@ -512,11 +689,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         attendance,
         settings,
         generatedCredentials,
+        leaves,
         hasAnyAdmin,
         login,
         logout,
         createInitialAdmin,
         registerEmployee,
+        updateEmployee,
+        deleteEmployee,
+        registerEmployeeLeave,
+        deleteEmployeeLeave,
         recordAttendanceMark,
         updateSettings,
         importEmployeesBatch,

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { 
   Camera, 
@@ -10,11 +10,15 @@ import {
   CheckCircle2, 
   Lock, 
   QrCode, 
-  ArrowRight,
-  ShieldCheck,
-  Radio,
+  ArrowRight, 
+  ShieldCheck, 
+  Radio, 
   ExternalLink,
-  Fingerprint
+  AlertTriangle,
+  Bell,
+  HeartPulse,
+  Palmtree,
+  Info
 } from 'lucide-react';
 import QRScannerModal from './QRScannerModal';
 import EmployeeBadgeCard from './EmployeeBadgeCard';
@@ -22,22 +26,137 @@ import { ErrorBoundary } from './ErrorBoundary';
 import CoopLogo from './CoopLogo';
 
 export default function EmployeePortal() {
-  const { user, attendance, settings } = useAuth();
+  const { user, attendance, settings, leaves } = useAuth();
   const [activeScanner, setActiveScanner] = useState<'entrada' | 'salida' | null>(null);
   const [showBadge, setShowBadge] = useState(false);
+  const [nowTime, setNowTime] = useState<string>('');
 
-  // Registros exclusivos de este empleado
-  const myRecords = attendance.filter(rec => rec.employee_id === user?.id || rec.employee?.id === user?.id);
+  // Registros exclusivos de este empleado (validación segura)
+  const myRecords = (attendance || []).filter(rec => rec?.employee_id === user?.id || rec?.employee?.id === user?.id);
 
   // Fecha de hoy local
   const todayStr = new Date().toISOString().split('T')[0];
-  const todayEntrada = myRecords.find(r => r.record_type === 'entrada' && r.timestamp_local.startsWith(todayStr));
-  const todaySalida = myRecords.find(r => r.record_type === 'salida' && r.timestamp_local.startsWith(todayStr));
+  const todayEntrada = myRecords.find(r => r?.record_type === 'entrada' && (r?.timestamp_local || '').startsWith(todayStr));
+  const todaySalida = myRecords.find(r => r?.record_type === 'salida' && (r?.timestamp_local || '').startsWith(todayStr));
+
+  // Verificar si el empleado tiene un período de licencia activo hoy (Reposo / Vacaciones)
+  const activeLeave = leaves.find(
+    l => (l.employee_id === user?.id) && l.start_date <= todayStr && l.end_date >= todayStr
+  );
+
+  // Reloj local para verificar si ya pasó la hora de entrada
+  useEffect(() => {
+    const updateTime = () => {
+      try {
+        const now = new Date();
+        const timeStr = new Intl.DateTimeFormat('es-PY', {
+          timeZone: settings.timezone || 'America/Asuncion',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }).format(now);
+        setNowTime(timeStr);
+      } catch {
+        const d = new Date();
+        setNowTime(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`);
+      }
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 30000);
+    return () => clearInterval(interval);
+  }, [settings.timezone]);
+
+  // Horario estipulado
+  const scheduleStartStr = user?.schedule_start?.substring(0, 5) || '08:00';
+  const scheduleEndStr = user?.schedule_end?.substring(0, 5) || '17:00';
+
+  // Alerta de marcación faltante (si ya pasó la hora de entrada y no hay marcación ni reposo)
+  const isPastStartTime = nowTime && nowTime > scheduleStartStr;
+  const showMissingEntradaAlert = !todayEntrada && !activeLeave && isPastStartTime;
 
   return (
-    <div className="max-w-xl mx-auto space-y-5 pb-10">
+    <div className="max-w-xl mx-auto space-y-5 pb-10 animate-fadeIn">
       
-      {/* Credencial Digital de Campo */}
+      {/* ======================================================== */}
+      {/* 1. NOTIFICACIONES Y AVISOS DE ASISTENCIA EN TIEMPO REAL */}
+      {/* ======================================================== */}
+
+      {/* AVISO A: PERÍODO ACTIVO DE REPOSO O VACACIONES */}
+      {activeLeave && (
+        <div className={`p-4 rounded-3xl border shadow-lg flex items-start space-x-3.5 animate-fadeIn ${
+          activeLeave.leave_type === 'vacaciones'
+            ? 'bg-amber-950/40 border-[#F5B942]/50 text-amber-200'
+            : 'bg-[#063D32]/80 border-[#00A878]/50 text-emerald-200'
+        }`}>
+          <div className="p-2 rounded-2xl bg-white/10 shrink-0 mt-0.5">
+            {activeLeave.leave_type === 'vacaciones' ? (
+              <Palmtree className="w-5 h-5 text-[#F5B942]" />
+            ) : (
+              <HeartPulse className="w-5 h-5 text-[#00A878]" />
+            )}
+          </div>
+          <div className="space-y-1">
+            <h4 className="font-bold text-sm text-white flex items-center gap-2">
+              <span>{activeLeave.leave_type === 'vacaciones' ? 'Período de Vacaciones Autorizado' : 'Reposo Médico Oficial Autorizado'}</span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/20 text-white font-black">
+                JUSTIFICADO
+              </span>
+            </h4>
+            <p className="text-xs leading-relaxed opacity-90">
+              Vigencia activa del <strong className="text-white">{activeLeave.start_date}</strong> al <strong className="text-white">{activeLeave.end_date}</strong>.
+            </p>
+            <p className="text-[11px] opacity-75 font-mono">
+              Su asistencia está registrada y justificada de forma automática por la administración. No requiere realizar marcaciones presenciales.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* AVISO B: RECORDATORIO DE ENTRADA PENDIENTE */}
+      {showMissingEntradaAlert && (
+        <div className="p-4 bg-yellow-950/40 border border-[#F5B942]/60 rounded-3xl text-amber-200 shadow-lg flex items-start space-x-3.5 animate-fadeIn">
+          <div className="p-2 rounded-2xl bg-amber-500/20 text-[#F5B942] shrink-0 mt-0.5">
+            <Bell className="w-5 h-5 animate-bounce" />
+          </div>
+          <div>
+            <h4 className="font-bold text-sm text-white">
+              Aviso de Asistencia: Entrada Pendiente
+            </h4>
+            <p className="text-xs text-amber-200/90 leading-relaxed mt-0.5">
+              Su jornada laboral inició a las <strong className="text-white font-mono">{scheduleStartStr}</strong> y aún no ha registrado su marcación de entrada de hoy.
+            </p>
+            <p className="text-[11px] text-amber-300 font-mono mt-1">
+              Tolerancia permitida: {settings.tolerance_minutes} minutos. Por favor registre su ingreso.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* AVISO C: NOTIFICACIÓN DE TARDANZA REGISTRADA */}
+      {todayEntrada && todayEntrada.status === 'tardanza' && (
+        <div className="p-3.5 bg-yellow-950/30 border border-[#F5B942]/40 rounded-2xl text-amber-200 flex items-start space-x-3 animate-fadeIn">
+          <AlertTriangle className="w-4 h-4 text-[#F5B942] shrink-0 mt-0.5" />
+          <div className="text-xs leading-relaxed">
+            <strong className="text-white font-bold block">Notificación de Llegada Tardía</strong>
+            Marcó su ingreso a las <span className="font-mono font-bold text-white">{(todayEntrada.timestamp_local || '').split(' ')[1] || todayEntrada.timestamp_local}</span> (Horario estipulado: {scheduleStartStr} con {settings.tolerance_minutes}m de tolerancia). Este registro ha sido notificado a Recursos Humanos.
+          </div>
+        </div>
+      )}
+
+      {/* AVISO D: NOTIFICACIÓN DE SALIDA ANTICIPADA */}
+      {todaySalida && todaySalida.status === 'salida_anticipada' && (
+        <div className="p-3.5 bg-rose-950/30 border border-[#EF5350]/40 rounded-2xl text-rose-200 flex items-start space-x-3 animate-fadeIn">
+          <AlertTriangle className="w-4 h-4 text-[#EF5350] shrink-0 mt-0.5" />
+          <div className="text-xs leading-relaxed">
+            <strong className="text-white font-bold block">Aviso de Salida Anticipada</strong>
+            Marcó su salida a las <span className="font-mono font-bold text-white">{(todaySalida.timestamp_local || '').split(' ')[1] || todaySalida.timestamp_local}</span> antes de la culminación de la jornada ({scheduleEndStr}).
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* 2. CREDENCIAL DIGITAL DE CAMPO                           */}
+      {/* ======================================================== */}
       <div className="relative rounded-3xl overflow-hidden shadow-2xl bg-[#101E1A] border border-[#203B30] p-5 sm:p-6 text-white">
         
         {/* Iluminación ambiental sutil */}
@@ -64,18 +183,31 @@ export default function EmployeePortal() {
           </div>
 
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
-                {user?.full_name}
-              </h2>
-              <div className="flex flex-wrap items-center gap-x-2 text-xs text-[#A5B4AC] mt-1">
-                <span className="text-[#00A878] font-semibold">{user?.position}</span>
-                <span>&bull;</span>
-                <span>{user?.department}</span>
+            <div className="flex items-center space-x-3.5">
+              {/* Foto o Avatar del usuario */}
+              <div className="w-14 h-16 rounded-xl overflow-hidden bg-[#071512] border-2 border-[#D6A72C]/60 shrink-0 shadow flex items-center justify-center">
+                {user?.avatar_url ? (
+                  <img src={user.avatar_url} alt={user.full_name} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full bg-gradient-to-br from-[#00A878] to-[#063D32] flex items-center justify-center text-white font-black text-xl">
+                    {user?.full_name?.charAt(0) || 'U'}
+                  </div>
+                )}
               </div>
-              <div className="text-xs font-mono text-[#A5B4AC] mt-2 flex items-center gap-1.5">
-                <span>Cédula CI:</span>
-                <span className="font-bold text-[#F5B942]">{user?.document_id}</span>
+
+              <div>
+                <h2 className="text-lg sm:text-xl font-black tracking-tight text-white leading-tight">
+                  {user?.full_name}
+                </h2>
+                <div className="flex flex-wrap items-center gap-x-2 text-xs text-[#A5B4AC] mt-1">
+                  <span className="text-[#00A878] font-semibold">{user?.position}</span>
+                  <span>&bull;</span>
+                  <span>{user?.department}</span>
+                </div>
+                <div className="text-xs font-mono text-[#A5B4AC] mt-1 flex items-center gap-1.5">
+                  <span>Cédula CI:</span>
+                  <span className="font-bold text-[#F5B942]">{user?.document_id}</span>
+                </div>
               </div>
             </div>
 
@@ -90,13 +222,15 @@ export default function EmployeePortal() {
           </div>
 
           <div className="mt-4 pt-3 border-t border-[#203B30] flex items-center justify-between text-[11px] text-[#A5B4AC] font-mono">
-            <span>Horario: {user?.schedule_start?.substring(0, 5)} - {user?.schedule_end?.substring(0, 5)}</span>
+            <span>Horario: {scheduleStartStr} - {scheduleEndStr}</span>
             <span className="text-[#00A878]">Tolerancia: {settings.tolerance_minutes} min</span>
           </div>
         </div>
       </div>
 
-      {/* Terminal Táctil de Marcación */}
+      {/* ======================================================== */}
+      {/* 3. TERMINAL TÁCTIL DE MARCACIÓN                          */}
+      {/* ======================================================== */}
       <div className="bg-[#101E1A] border border-[#203B30] rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
         
         <div className="flex items-center justify-between pb-3 border-b border-[#203B30]">
@@ -129,7 +263,9 @@ export default function EmployeePortal() {
             <div className="text-[11px] font-medium mt-1">
               {todayEntrada ? (
                 <span className={`inline-flex items-center gap-1 font-semibold ${
-                  todayEntrada.status === 'puntual' ? 'text-[#00A878]' : 'text-[#F5B942]'
+                  todayEntrada.status === 'puntual' || todayEntrada.status === 'justificado'
+                    ? 'text-[#00A878]' 
+                    : 'text-[#F5B942]'
                 }`}>
                   <CheckCircle2 className="w-3 h-3" />
                   <span className="capitalize">{todayEntrada.status}</span>
@@ -215,7 +351,9 @@ export default function EmployeePortal() {
 
       </div>
 
-      {/* Tira de Marcaciones Auditadas */}
+      {/* ======================================================== */}
+      {/* 4. TIRA DE MARCACIONES AUDITADAS (HISTORIAL PERSONAL)    */}
+      {/* ======================================================== */}
       <div className="bg-[#101E1A] border border-[#203B30] rounded-3xl p-5 sm:p-6 shadow-xl space-y-3">
         <div className="flex items-center justify-between pb-3 border-b border-[#203B30]">
           <div className="flex items-center space-x-2 text-[#F5F7F5]">
@@ -228,10 +366,6 @@ export default function EmployeePortal() {
             <Lock className="w-3 h-3 text-[#00A878]" /> Registro inmutable
           </span>
         </div>
-
-        <p className="text-[11px] text-[#A5B4AC] leading-relaxed">
-          Las horas son selladas por el reloj oficial de Cooperativa Chinokue Ltda.
-        </p>
 
         <div className="divide-y divide-[#203B30] max-h-64 overflow-y-auto">
           {myRecords.length === 0 ? (
@@ -261,7 +395,7 @@ export default function EmployeePortal() {
                     </div>
 
                     <div className="text-[10px] text-[#A5B4AC] font-mono flex items-center space-x-2">
-                      <span>{rec.scan_method === 'qr_scan' ? 'Escaneo QR' : 'Kiosco'}</span>
+                      <span>{rec.notes ? rec.notes : (rec.scan_method === 'qr_scan' ? 'Escaneo QR' : 'Kiosco')}</span>
                       {rec.accuracy && <span>&bull; GPS ±{Math.round(rec.accuracy)}m</span>}
                       {mapsUrl && (
                         <a
@@ -279,7 +413,7 @@ export default function EmployeePortal() {
 
                   <div>
                     <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold uppercase ${
-                      rec.status === 'puntual'
+                      rec.status === 'puntual' || rec.status === 'justificado'
                         ? 'bg-emerald-950/60 text-[#00A878] border border-emerald-800/60'
                         : rec.status === 'tardanza'
                         ? 'bg-yellow-950/60 text-[#F5B942] border border-yellow-800/60'

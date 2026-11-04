@@ -18,6 +18,7 @@ export default function LoginScreen() {
   const { login, createInitialAdmin, settings } = useAuth();
   
   const [mode, setMode] = useState<'login' | 'initial_admin'>('login');
+  const [hasServerAdmin, setHasServerAdmin] = useState<boolean | null>(null);
   
   // Campos de inicio de sesión
   const [identifier, setIdentifier] = useState('');
@@ -33,19 +34,17 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Consultar al servidor si existe al menos un administrador registrado
+  // Consultar estado de administrador en el servidor de forma no invasiva
   useEffect(() => {
     async function checkStatus() {
       try {
         const res = await fetch('/api/system-status');
         const data = await res.json();
-        if (data && data.hasAdmin === false) {
-          setMode('initial_admin');
-        } else {
-          setMode('login');
+        if (data && typeof data.hasAdmin === 'boolean') {
+          setHasServerAdmin(data.hasAdmin);
         }
       } catch {
-        setMode('login');
+        setHasServerAdmin(true);
       }
     }
     checkStatus();
@@ -107,6 +106,49 @@ export default function LoginScreen() {
         {/* Tarjeta de Formulario Principal */}
         <div className="bg-[#101E1A] border border-[#203B30] rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
           
+          {/* Selector de Pestañas: Iniciar Sesión / Registrar Administrador */}
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#162720] rounded-2xl border border-[#203B30] mb-6">
+            <button
+              type="button"
+              onClick={() => { setMode('login'); setErrorMsg(null); }}
+              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+                mode === 'login'
+                  ? 'bg-[#00A878] text-white shadow-md'
+                  : 'text-[#A5B4AC] hover:text-white'
+              }`}
+            >
+              Iniciar Sesión
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('initial_admin'); setErrorMsg(null); }}
+              className={`py-2 px-3 rounded-xl text-xs font-bold transition-all relative ${
+                mode === 'initial_admin'
+                  ? 'bg-[#00A878] text-white shadow-md'
+                  : 'text-[#A5B4AC] hover:text-white'
+              }`}
+            >
+              <span>Registrar Admin</span>
+              {hasServerAdmin === false && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#F5B942] rounded-full animate-ping" />
+              )}
+            </button>
+          </div>
+
+          {/* Aviso sugerido si no hay admin aún en el servidor */}
+          {hasServerAdmin === false && mode === 'login' && (
+            <div className="mb-4 p-3 bg-amber-950/40 border border-[#F5B942]/40 rounded-2xl text-[11px] text-amber-200 flex items-center justify-between">
+              <span>💡 ¿Primera instalación? Puedes configurar el admin inicial.</span>
+              <button
+                type="button"
+                onClick={() => setMode('initial_admin')}
+                className="text-[#F5B942] underline font-bold ml-2 shrink-0"
+              >
+                Configurar
+              </button>
+            </div>
+          )}
+
           {/* Alerta de Error */}
           {errorMsg && (
             <div className="mb-5 p-3.5 bg-rose-950/40 border border-[#EF5350]/40 rounded-2xl text-xs text-rose-200 flex items-start space-x-2.5 animate-fadeIn">
@@ -177,8 +219,15 @@ export default function LoginScreen() {
                 )}
               </button>
 
-              <div className="pt-2 text-center">
-                <span className="text-[11px] text-[#A5B4AC]">
+              <div className="pt-2 text-center space-y-1">
+                <button
+                  type="button"
+                  onClick={() => { setMode('initial_admin'); setErrorMsg(null); }}
+                  className="text-[11px] text-[#00A878] hover:underline font-semibold block mx-auto"
+                >
+                  ¿Es la primera vez? Configurar Administrador Principal
+                </button>
+                <span className="text-[10px] text-[#A5B4AC] block">
                   Personal operativo y administrativo autorizado
                 </span>
               </div>
@@ -258,6 +307,16 @@ export default function LoginScreen() {
               >
                 {loading ? 'Creando cuenta...' : 'Crear Administrador Principal'}
               </button>
+
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => { setMode('login'); setErrorMsg(null); }}
+                  className="text-xs text-[#00A878] hover:underline font-bold"
+                >
+                  ← Volver a Iniciar Sesión con mi cuenta
+                </button>
+              </div>
 
             </form>
           )}

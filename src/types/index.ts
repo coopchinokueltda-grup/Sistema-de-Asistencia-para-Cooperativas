@@ -2,7 +2,22 @@ export type UserRole = 'admin' | 'employee' | 'supervisor';
 
 export type RecordType = 'entrada' | 'salida';
 
-export type AttendanceStatus = 'puntual' | 'tardanza' | 'salida_anticipada' | 'salida_normal' | 'tiempo_extra';
+export type AttendanceStatus = 'puntual' | 'tardanza' | 'salida_anticipada' | 'salida_normal' | 'tiempo_extra' | 'justificado';
+
+export type LeaveType = 'vacaciones' | 'reposo_medico' | 'permiso_especial';
+
+export interface EmployeeLeave {
+  id: string;
+  employee_id: string;
+  leave_type: LeaveType;
+  start_date: string; // "YYYY-MM-DD"
+  end_date: string; // "YYYY-MM-DD"
+  reason?: string;
+  approved_by?: string;
+  is_active: boolean;
+  created_at: string;
+  employee?: Profile;
+}
 
 export interface Profile {
   id: string;

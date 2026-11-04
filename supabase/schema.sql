@@ -42,12 +42,25 @@ CREATE TABLE IF NOT EXISTS public.attendance_records (
     device_info TEXT, -- Dispositivo / Navegador
     ip_address TEXT,
     scan_method TEXT DEFAULT 'qr_scan' CHECK (scan_method IN ('qr_scan', 'kiosk_scan', 'manual_admin')),
-    status TEXT DEFAULT 'puntual' CHECK (status IN ('puntual', 'tardanza', 'salida_anticipada', 'salida_normal', 'tiempo_extra')),
+    status TEXT DEFAULT 'puntual' CHECK (status IN ('puntual', 'tardanza', 'salida_anticipada', 'salida_normal', 'tiempo_extra', 'justificado')),
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
 
--- 4. Tabla de configuración de la empresa y normativa
+-- 4. Tabla de licencias, reposos médicos y vacaciones
+CREATE TABLE IF NOT EXISTS public.employee_leaves (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    employee_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    leave_type TEXT NOT NULL CHECK (leave_type IN ('vacaciones', 'reposo_medico', 'permiso_especial')),
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    reason TEXT,
+    approved_by UUID REFERENCES public.profiles(id),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
+);
+
+-- 5. Tabla de configuración de la empresa y normativa
 CREATE TABLE IF NOT EXISTS public.system_settings (
     id TEXT PRIMARY KEY DEFAULT 'config',
     company_name TEXT NOT NULL DEFAULT 'Cooperativa Chinokue Ltda',
@@ -159,3 +172,42 @@ CREATE INDEX IF NOT EXISTS idx_attendance_employee ON public.attendance_records(
 CREATE INDEX IF NOT EXISTS idx_attendance_timestamp ON public.attendance_records(timestamp_utc DESC);
 CREATE INDEX IF NOT EXISTS idx_profiles_qr_token ON public.profiles(qr_token);
 CREATE INDEX IF NOT EXISTS idx_profiles_document_id ON public.profiles(document_id);
+
+-- 12. Row Level Security y Políticas para EMPLOYEE_LEAVES
+ALTER TABLE public.employee_leaves ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admin full access on employee_leaves"
+    ON public.employee_leaves
+    FOR ALL
+    TO authenticated
+    USING (public.is_admin());
+
+CREATE POLICY "Employee view own leaves"
+    ON public.employee_leaves
+    FOR SELECT
+    TO authenticated
+    USING (employee_id = auth.uid());
+
+CREATE INDEX IF NOT EXISTS idx_leaves_employee ON public.employee_leaves(employee_id);
+CREATE INDEX IF NOT EXISTS idx_leaves_dates ON public.employee_leaves(start_date, end_date);
+
+-- 13. Configuración opcional de Supabase Storage para fotos de carnet
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('employee-photos', 'employee-photos', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Permitir lectura pública de las fotos del carnet
+CREATE POLICY "Public Access for Employee Photos"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'employee-photos');
+
+-- Permitir a usuarios autenticados y administradores subir fotos
+CREATE POLICY "Authenticated users can upload employee photos"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'employee-photos');
+
+CREATE POLICY "Admin can update or delete employee photos"
+ON storage.objects FOR ALL
+TO authenticated
+USING (bucket_id = 'employee-photos' AND public.is_admin());
